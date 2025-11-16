@@ -47,7 +47,7 @@ jobs:
       - name: Assume AWS Role
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets[format('AWS_ROLE_ARN_{0}', github.event.inputs.environment)] }}
+          role-to-assume: ${{ github.event.inputs.environment == 'dr' && secrets.AWS_ROLE_ARN_DR || github.event.inputs.environment == 'stage' && secrets.AWS_ROLE_ARN_STAGE || secrets.AWS_ROLE_ARN_PROD }}
           role-session-name: ${{ env.role-session-name }}
           aws-region: ${{ env.AWS_REGION }}
 
