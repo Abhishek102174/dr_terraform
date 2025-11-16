@@ -68,6 +68,15 @@ jobs:
         working-directory: ./bootstrap
         run: terraform apply -auto-approve bootstrap-plan
 
+      - name: Upload Bootstrap State Artifact
+        if: github.event.inputs.action == 'create'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-state-${{ github.event.inputs.environment }}
+          path: bootstrap/terraform.tfstate
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Get Bootstrap Outputs
         if: github.event.inputs.action == 'create'
         working-directory: ./bootstrap
@@ -126,6 +135,24 @@ jobs:
           delete-branch: true
           add-paths: |
             backend-configs/${{ github.event.inputs.environment }}.hcl
+
+      - name: Download Bootstrap State Artifact
+        if: github.event.inputs.action == 'destroy'
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: bootstrap-state-${{ github.event.inputs.environment }}
+          path: bootstrap
+
+      - name: Reconstruct State If Missing
+        if: github.event.inputs.action == 'destroy'
+        working-directory: ./bootstrap
+        run: |
+          if [ ! -f "terraform.tfstate" ]; then
+            terraform init
+            terraform import aws_s3_bucket.terraform_state "dr-terraform-state-${{ github.event.inputs.environment }}"
+            terraform import aws_dynamodb_table.terraform_locks "dr-terraform-locks-${{ github.event.inputs.environment }}"
+          fi
 
       - name: Terraform Destroy (Bootstrap)
         if: github.event.inputs.action == 'destroy'
