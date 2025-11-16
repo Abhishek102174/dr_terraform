@@ -1,0 +1,33 @@
+{
+  "vpc_name": "vpc-prod",
+  "vpc_cidr": "10.220.48.0/20",
+  "name_prefix": "prod-west",
+  "region": "us-west-2",
+  "solr_name_prefix": "solr-prod-west",
+  "solr_subnet_cidr_base": "10.221.0.0/20",
+  "solr_instance_type": "m5.2xlarge",
+  "solr_cluster_size": 5,
+  "solr_data_volume_size": 100,
+  "solr_data_volume_iops": 300,
+  "solr_fallback_ami_id": "ami-0abcdef1234567892",
+  "health_check_grace_period": 1800,
+  "enable_deletion_protection": true,
+  "create_igw": true,
+  "create_nat_gateways": true,
+  "nat_gateway_count": 3,
+  "create_tgw": true,
+  "common_tags": {
+    "Environment": "prod",
+    "cost_center": "WG09",
+    "env": "production",
+    "location": "north_virginia-us",
+    "tier": "0",
+    "value_stream": "web2.0",
+    "iso_location": "us",
+    "technical_owner": "web2.0",
+    "version": "1.0",
+    "app": "it-web",
+    "purpose": "production-environment",
+    "managed_by": "terraform"
+  }
+}

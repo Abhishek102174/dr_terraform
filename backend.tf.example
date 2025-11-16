@@ -1,0 +1,62 @@
+# Terraform Backend Configuration
+# Copy this file to backend.tf and update with your actual backend details
+
+terraform {
+  backend "s3" {
+    # S3 bucket for storing Terraform state
+    bucket = "dr-terraform-state-ENVIRONMENT-TIMESTAMP"
+    
+    # State file path within the bucket
+    key = "ENVIRONMENT/terraform.tfstate"
+    
+    # AWS region where the S3 bucket is located
+    region = "us-east-1"
+    
+    # DynamoDB table for state locking
+    dynamodb_table = "dr-terraform-locks-ENVIRONMENT"
+    
+    # Enable server-side encryption
+    encrypt = true
+    
+    # Optional: KMS key for encryption (if using KMS instead of AES256)
+    # kms_key_id = "arn:aws:kms:us-east-1:ACCOUNT-ID:key/KEY-ID"
+    
+    # Optional: Workspace key prefix for multi-environment setups
+    # workspace_key_prefix = "workspaces"
+  }
+}
+
+# Example configurations for different environments:
+
+# DR Environment
+# terraform {
+#   backend "s3" {
+#     bucket         = "dr-terraform-state-dr-1699876543"
+#     key            = "dr/terraform.tfstate"
+#     region         = "us-east-1"
+#     dynamodb_table = "dr-terraform-locks-dr"
+#     encrypt        = true
+#   }
+# }
+
+# Stage Environment  
+# terraform {
+#   backend "s3" {
+#     bucket         = "dr-terraform-state-stage-1699876543"
+#     key            = "stage/terraform.tfstate"
+#     region         = "us-east-1"
+#     dynamodb_table = "dr-terraform-locks-stage"
+#     encrypt        = true
+#   }
+# }
+
+# Production Environment
+# terraform {
+#   backend "s3" {
+#     bucket         = "dr-terraform-state-prod-1699876543"
+#     key            = "prod/terraform.tfstate"
+#     region         = "us-east-1"
+#     dynamodb_table = "dr-terraform-locks-prod"
+#     encrypt        = true
+#   }
+# }

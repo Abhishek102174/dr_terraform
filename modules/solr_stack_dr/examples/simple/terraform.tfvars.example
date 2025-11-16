@@ -1,0 +1,28 @@
+# Example Terraform Variables File
+# Copy this file to terraform.tfvars and customize values
+
+aws_region  = "us-west-2"
+name_prefix = "solr-dr-west"
+vpc_cidr    = "10.201.0.0/20"
+key_name    = "your-key-pair-name"
+
+# Instance configuration
+instance_type     = "m5.xlarge"
+cluster_size      = 3
+data_volume_size  = 50
+data_volume_iops  = 150
+
+# Operational settings
+health_check_grace_period  = 1200
+enable_deletion_protection = false
+
+# Tags
+common_tags = {
+  Environment     = "dr"
+  Service         = "solr"
+  ManagedBy      = "terraform"
+  Purpose        = "disaster-recovery"
+  CostCenter     = "WG09"
+  TechnicalOwner = "web2.0"
+  Region         = "us-west-2"
+}

@@ -1,0 +1,3 @@
+project_name = "dr"
+environment  = "dr"
+aws_region   = "us-east-1"

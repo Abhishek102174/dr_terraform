@@ -1,0 +1,33 @@
+{
+  "vpc_name": "vpc-stage",
+  "vpc_cidr": "10.210.48.0/20",
+  "name_prefix": "stage-west",
+  "region": "us-west-2",
+  "solr_name_prefix": "solr-stage-west",
+  "solr_subnet_cidr_base": "10.211.0.0/20",
+  "solr_instance_type": "m5.large",
+  "solr_cluster_size": 2,
+  "solr_data_volume_size": 30,
+  "solr_data_volume_iops": 100,
+  "solr_fallback_ami_id": "ami-0abcdef1234567891",
+  "health_check_grace_period": 600,
+  "enable_deletion_protection": false,
+  "create_igw": true,
+  "create_nat_gateways": true,
+  "nat_gateway_count": 2,
+  "create_tgw": false,
+  "common_tags": {
+    "Environment": "stage",
+    "cost_center": "WG09",
+    "env": "staging",
+    "location": "north_virginia-us",
+    "tier": "2",
+    "value_stream": "web2.0",
+    "iso_location": "us",
+    "technical_owner": "web2.0",
+    "version": "1.0",
+    "app": "it-web",
+    "purpose": "staging-environment",
+    "managed_by": "terraform"
+  }
+}

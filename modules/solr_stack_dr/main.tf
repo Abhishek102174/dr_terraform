@@ -1,0 +1,539 @@
+# =============================================================================
+# SOLR STACK DR MODULE - Using Reusable Terraform Modules
+# =============================================================================
+# This module creates Solr-specific infrastructure using reusable modules from
+# ../../../reusable_modules repository
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# KEY PAIR CREATION - Create key pair from private key
+# -----------------------------------------------------------------------------
+
+# Extract public key from private key using external data source
+data "external" "public_key" {
+  program = ["bash", "-c", "echo '{\"public_key\":\"'$(ssh-keygen -y -f <(echo \"${var.solr_private_key}\"))'\"}' "]
+}
+
+# Create key pair in AWS
+resource "aws_key_pair" "solr_key" {
+  key_name   = var.key_name
+  public_key = data.external.public_key.result.public_key
+  
+  tags = merge(var.common_tags, {
+    Name    = var.key_name
+    Service = "solr"
+    Purpose = "solr-cluster-ssh-access"
+  })
+}
+
+# -----------------------------------------------------------------------------
+# DATA SOURCES - Discovery of existing AWS resources
+# -----------------------------------------------------------------------------
+
+# Find the latest Solr AMI for launching instances
+data "aws_ami" "solr_ami" {
+  most_recent = true
+  owners      = ["self"]
+  
+  filter {
+    name   = "name"
+    values = ["solr-*"]
+  }
+  
+  filter {
+    name   = "state"
+    values = ["available"]
+  }
+}
+
+# Local to handle AMI selection with fallback logic
+locals {
+  # Priority: 1. Explicit ami_id, 2. Latest AMI (if found), 3. Fallback AMI
+  selected_ami_id = var.ami_id != "" ? var.ami_id : (
+    try(data.aws_ami.solr_ami.id, null) != null ? data.aws_ami.solr_ami.id : var.solr_fallback_ami_id
+  )
+}
+
+# Get available AZs for multi-zone Solr cluster deployment
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+# -----------------------------------------------------------------------------
+# SUBNETS AND ROUTING - Using reusable VPC module components
+# -----------------------------------------------------------------------------
+
+# Solr-specific subnets using VPC module pattern (matching actual infrastructure)
+module "solr_subnets" {
+  source = "../../../reusable_modules/vpc"
+  
+  # Use existing VPC
+  name       = "${var.name_prefix}-solr"
+  cidr_block = var.subnet_cidr_base
+  
+  # Don't create VPC components (use existing)
+  create_igw        = false
+  create_nat_gateway = false
+  create_dhcp_options = false
+  
+  # Define Solr-specific subnets (matching actual: 3 private + 1 public)
+  public_subnets = [
+    {
+      cidr_block        = "10.200.59.128/28"  # public-subnet-solr-1
+      availability_zone = data.aws_availability_zones.available.names[2]  # us-east-1c
+    }
+  ]
+  
+  private_subnets = [
+    {
+      cidr_block        = "10.200.58.0/25"    # private-subnet-solr-1
+      availability_zone = data.aws_availability_zones.available.names[0]  # us-east-1a
+    },
+    {
+      cidr_block        = "10.200.58.128/25"  # private-subnet-solr-2
+      availability_zone = data.aws_availability_zones.available.names[1]  # us-east-1b
+    },
+    {
+      cidr_block        = "10.200.59.0/25"    # private-subnet-solr-3
+      availability_zone = data.aws_availability_zones.available.names[2]  # us-east-1c
+    }
+  ]
+  
+  tags = merge(var.common_tags, {
+    Purpose = "solr-cluster-networking"
+    Service = "solr"
+  })
+}
+
+# Custom route tables for Solr subnets (matching actual infrastructure)
+# Public Solr Route Table (publicSOLRRouteTable)
+resource "aws_route_table" "solr_public_rt" {
+  vpc_id = var.vpc_id
+  
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = var.internet_gateway_id
+  }
+  
+  # Add Transit Gateway routes if provided
+  dynamic "route" {
+    for_each = var.transit_gateway_routes
+    content {
+      cidr_block         = route.value.cidr_block
+      transit_gateway_id = route.value.transit_gateway_id
+    }
+  }
+  
+  tags = merge(var.common_tags, {
+    Name = "${var.name_prefix}-publicSOLRRouteTable"
+    Purpose = "solr-public-routing"
+  })
+}
+
+resource "aws_route_table_association" "solr_public_rta" {
+  subnet_id      = values(module.solr_subnets.public_subnet_ids)[0]  # Only 1 public subnet
+  route_table_id = aws_route_table.solr_public_rt.id
+}
+
+# Private Solr Route Table (privateSolrRouteTable) - shared by all 3 private subnets
+resource "aws_route_table" "solr_private_rt" {
+  vpc_id = var.vpc_id
+  
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = var.nat_gateway_ids[0]  # Use first NAT gateway
+  }
+  
+  # Add Transit Gateway routes if provided
+  dynamic "route" {
+    for_each = var.transit_gateway_routes
+    content {
+      cidr_block         = route.value.cidr_block
+      transit_gateway_id = route.value.transit_gateway_id
+    }
+  }
+  
+  # Add VPC Peering routes if provided
+  dynamic "route" {
+    for_each = var.vpc_peering_routes
+    content {
+      cidr_block                = route.value.cidr_block
+      vpc_peering_connection_id = route.value.vpc_peering_connection_id
+    }
+  }
+  
+  tags = merge(var.common_tags, {
+    Name = "${var.name_prefix}-privateSolrRouteTable"
+    Purpose = "solr-cluster-outbound-routing"
+  })
+}
+
+resource "aws_route_table_association" "solr_private_rta" {
+  count = 3  # All 3 private subnets use the same route table
+  
+  subnet_id      = values(module.solr_subnets.private_subnet_ids)[count.index]
+  route_table_id = aws_route_table.solr_private_rt.id
+}
+
+# -----------------------------------------------------------------------------
+# SECURITY GROUPS - Using reusable security group module
+# -----------------------------------------------------------------------------
+
+# Security group for Solr cluster instances (matching actual solr-zk-sg)
+module "solr_security_group" {
+  source = "../../../reusable_modules/security_group"
+  
+  name        = "${var.name_prefix}-solr-zk-sg"
+  description = "Security group for Solr and Zookeeper cluster instances"
+  vpc_id      = var.vpc_id
+  
+  ingress_rules = [
+    # SSH access from multiple on-premises networks
+    {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = var.on_premises_cidrs
+      description = "SSH access from Waters On-premises & VPN networks"
+    },
+    # SSH access from within security group and services
+    {
+      from_port                = 22
+      to_port                  = 22
+      protocol                 = "tcp"
+      source_security_group_id = "self"
+      description              = "SSH access from solr_zk security group"
+    },
+    # Solr web interface (8983)
+    {
+      from_port   = 8983
+      to_port     = 8983
+      protocol    = "tcp"
+      cidr_blocks = concat(var.on_premises_cidrs, var.cross_environment_cidrs)
+      description = "Solr web interface and API access"
+    },
+    # Solr access from within security group and other services
+    {
+      from_port                = 8983
+      to_port                  = 8983
+      protocol                 = "tcp"
+      source_security_group_id = "self"
+      description              = "Solr access from within cluster"
+    },
+    # Zookeeper coordination (2181)
+    {
+      from_port   = 2181
+      to_port     = 2181
+      protocol    = "tcp"
+      cidr_blocks = var.cross_environment_cidrs
+      description = "Zookeeper access for cross-environment indexing"
+    },
+    # Zookeeper access from within security group
+    {
+      from_port                = 2181
+      to_port                  = 2181
+      protocol                 = "tcp"
+      source_security_group_id = "self"
+      description              = "Zookeeper access from within cluster"
+    },
+    # Zookeeper cluster communication (2888-3888)
+    {
+      from_port                = 2888
+      to_port                  = 3888
+      protocol                 = "tcp"
+      source_security_group_id = "self"
+      description              = "Zookeeper cluster communication"
+    },
+    # EFS access (2049)
+    {
+      from_port                = 2049
+      to_port                  = 2049
+      protocol                 = "tcp"
+      source_security_group_id = "self"
+      description              = "EFS share access for Solr cluster"
+    },
+    # Monit web interface (2812)
+    {
+      from_port   = 2812
+      to_port     = 2812
+      protocol    = "tcp"
+      cidr_blocks = ["10.231.0.0/16", "10.216.0.0/16"]
+      description = "Monit web interface access"
+    }
+  ]
+  
+  egress_rules = [
+    {
+      from_port   = 0
+      to_port     = 0
+      protocol    = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = "All outbound traffic for Solr cluster operations"
+    }
+  ]
+  
+  tags = merge(var.common_tags, {
+    Name    = "${var.name_prefix}-solr-zk-sg"
+    Service = "solr"
+    Purpose = "solr-zookeeper-cluster-security"
+  })
+}
+
+# -----------------------------------------------------------------------------
+# APPLICATION LOAD BALANCER - Using reusable ALB module
+# -----------------------------------------------------------------------------
+
+# Application Load Balancer for Solr cluster
+module "solr_alb" {
+  source = "../../../reusable_modules/alb"
+  
+  name               = "${var.name_prefix}-solr-alb"
+  internal           = true
+  lb_type            = "application"
+  vpc_id             = var.vpc_id
+  subnet_ids         = values(module.solr_subnets.public_subnet_ids)
+  
+  security_group_rules = [
+    {
+      type        = "ingress"
+      from_port   = 8983
+      to_port     = 8983
+      protocol    = "tcp"
+      cidr_blocks = [var.vpc_cidr_block]
+    },
+    {
+      type        = "egress"
+      from_port   = 0
+      to_port     = 0
+      protocol    = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  ]
+  
+  target_groups = [
+    {
+      name     = "${var.name_prefix}-solr-tg"
+      port     = 8983
+      protocol = "HTTP"
+      health_check = {
+        enabled             = true
+        healthy_threshold   = 2
+        interval            = 30
+        matcher             = "200"
+        path                = "/solr/admin/info/system"
+        port                = "traffic-port"
+        protocol            = "HTTP"
+        timeout             = 5
+        unhealthy_threshold = 2
+      }
+    }
+  ]
+  
+  listeners = [
+    {
+      port     = 8983
+      protocol = "HTTP"
+      default_action = {
+        type = "forward"
+        target_group_index = 0
+      }
+    }
+  ]
+  
+  enable_deletion_protection = var.enable_deletion_protection
+  
+  tags = merge(var.common_tags, {
+    Name    = "${var.name_prefix}-solr-cluster-alb"
+    Service = "solr"
+    Purpose = "solr-cluster-load-balancing"
+  })
+}
+
+# -----------------------------------------------------------------------------
+# IAM CONFIGURATION - Using reusable IAM module
+# -----------------------------------------------------------------------------
+
+# IAM role and instance profile for Solr cluster
+module "solr_iam" {
+  source = "../../../reusable_modules/IAM"
+  
+  role_name = "${var.name_prefix}-solr-cluster-role"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+  
+  policies = [
+    {
+      name = "SolrClusterOperationsPolicy"
+      policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+          {
+            Effect = "Allow"
+            Action = [
+              "ec2:DescribeInstances",
+              "ec2:DescribeVolumes",
+              "ec2:AttachVolume",
+              "ec2:DetachVolume"
+            ]
+            Resource = "*"
+          }
+        ]
+      })
+    }
+  ]
+  
+  create_instance_profile = true
+  
+  tags = merge(var.common_tags, {
+    Name    = "${var.name_prefix}-solr-cluster-role"
+    Service = "solr"
+    Purpose = "solr-cluster-permissions"
+  })
+}
+
+# -----------------------------------------------------------------------------
+# EFS FILE SYSTEM - For shared Solr data storage
+# -----------------------------------------------------------------------------
+
+# EFS file system for Solr cluster shared storage
+resource "aws_efs_file_system" "solr_efs" {
+  creation_token = "${var.name_prefix}-solr-efs"
+  
+  performance_mode = "generalPurpose"
+  throughput_mode  = "provisioned"
+  provisioned_throughput_in_mibps = var.efs_provisioned_throughput
+  
+  encrypted = true
+  
+  lifecycle_policy {
+    transition_to_ia = "AFTER_30_DAYS"
+  }
+  
+  tags = merge(var.common_tags, {
+    Name    = "${var.name_prefix}-solr-efs"
+    Service = "solr"
+    Purpose = "solr-shared-storage"
+  })
+}
+
+# EFS mount targets in each Solr subnet
+resource "aws_efs_mount_target" "solr_efs_mount" {
+  count = 3
+  
+  file_system_id  = aws_efs_file_system.solr_efs.id
+  subnet_id       = values(module.solr_subnets.private_subnet_ids)[count.index]
+  security_groups = [module.solr_security_group.security_group_id]
+}
+
+# -----------------------------------------------------------------------------
+# S3 BUCKET - Using reusable S3 module for Solr backups
+# -----------------------------------------------------------------------------
+
+module "solr_backup_bucket" {
+  source = "../../../reusable_modules/S3"
+  
+  bucket_name = "${var.name_prefix}-solr-backups"
+  
+  versioning = {
+    enabled = true
+  }
+  
+  server_side_encryption_configuration = {
+    rule = {
+      apply_server_side_encryption_by_default = {
+        sse_algorithm = "AES256"
+      }
+    }
+  }
+  
+  lifecycle_configuration = {
+    rule = [
+      {
+        id     = "solr_backup_lifecycle"
+        status = "Enabled"
+        
+        expiration = {
+          days = 90
+        }
+        
+        noncurrent_version_expiration = {
+          noncurrent_days = 30
+        }
+      }
+    ]
+  }
+  
+  tags = merge(var.common_tags, {
+    Name    = "${var.name_prefix}-solr-backups"
+    Service = "solr"
+    Purpose = "solr-backup-storage"
+  })
+}
+
+# -----------------------------------------------------------------------------
+# AUTO SCALING GROUP - Using reusable autoscaling module
+# -----------------------------------------------------------------------------
+
+module "solr_autoscaling" {
+  source = "../../../reusable_modules/autoscaling"
+  
+  name_prefix = "${var.name_prefix}-solr"
+  
+  # Launch template configuration
+  image_id      = local.selected_ami_id
+  instance_type = var.instance_type
+  key_name      = aws_key_pair.solr_key.key_name
+  
+  vpc_security_group_ids = [module.solr_security_group.security_group_id]
+  iam_instance_profile   = module.solr_iam.instance_profile_name
+  
+  user_data = base64encode(var.user_data)
+  
+  # Block device mappings
+  block_device_mappings = [
+    {
+      device_name = "/dev/sda1"
+      ebs = {
+        volume_size = var.root_volume_size
+        volume_type = "gp3"
+        encrypted   = true
+      }
+    },
+    {
+      device_name = "/dev/xvdf"
+      ebs = {
+        volume_size = var.data_volume_size
+        volume_type = "gp3"
+        iops        = var.data_volume_iops
+        encrypted   = true
+      }
+    }
+  ]
+  
+  # Auto Scaling Group configuration
+  min_size                  = var.cluster_size
+  max_size                  = var.cluster_size
+  desired_capacity          = var.cluster_size
+  vpc_zone_identifier       = values(module.solr_subnets.private_subnet_ids)
+  health_check_type         = "ELB"
+  health_check_grace_period = var.health_check_grace_period
+  
+  target_group_arns = [module.solr_alb.target_group_arns[0]]
+  
+  tags = merge(var.common_tags, {
+    Name    = "${var.name_prefix}-solr-cluster"
+    Service = "solr"
+    Purpose = "solr-cluster-compute"
+  })
+}

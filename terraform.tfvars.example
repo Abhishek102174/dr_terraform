@@ -1,0 +1,17 @@
+# =============================================================================
+# TERRAFORM VARIABLES EXAMPLE
+# =============================================================================
+# Copy this file to terraform.tfvars and customize for your environment
+
+# Environment Selection (dr, stage, prod)
+# If not specified, uses terraform workspace
+environment = "dr"
+
+# Solr Configuration
+solr_key_name   = "my-solr-key"
+solr_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... your-public-key-here"
+
+# Optional Overrides (uncomment to override environment defaults)
+# vpc_cidr_override      = "10.250.48.0/20"
+# instance_type_override = "m5.large"
+# cluster_size_override  = 2
