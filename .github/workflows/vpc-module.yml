@@ -443,6 +443,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && github.event.inputs.action == 'destroy'
     environment: ${{ github.event.inputs.environment || 'dr' }}
+    needs: [vpc_apply_dr]
     name: VPC Destroy for DR Env
     env:
       FEATURE_FLAG: ${{ vars.FEATURE_VPC_DESTROY }}
