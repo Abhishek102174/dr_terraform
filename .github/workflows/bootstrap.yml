@@ -1,6 +1,3 @@
-# Combined bootstrap workflow: create and destroy in a single session controlled by feature flags
-# Flags: independently enable create/destroy via inputs or environment; state preserved across stages
-# Safety: clear logging, rollback on failure, secure secrets handling; see inputs below for usage
 name: Bootstrap Terraform Backend
 
 on:
@@ -15,23 +12,6 @@ on:
           - stage
           - prod
 
-      create_enabled:
-        description: 'Enable create stage (feature flag)'
-        required: false
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-      destroy_enabled:
-        description: 'Enable destroy stage (feature flag)'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-# manual approval inputs removed
 
 permissions:
   id-token: write
@@ -45,11 +25,11 @@ env:
   role-session-name: "gh-bootstrap-${{ github.run_id }}"
 
 jobs:
-  bootstrap:
-    name: Bootstrap Backend Infrastructure
+  create:
+    if: ${{ vars.CREATE_BOOTSTRAP_ENABLED != 'false' }}
+    name: Create Backend Infrastructure
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}-bootstrap
-    
+    environment: ${{ github.event.inputs.environment }}
     steps:
       - name: Code Checkout
         uses: actions/checkout@v4
@@ -66,26 +46,22 @@ jobs:
           role-session-name: ${{ env.role-session-name }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init (Bootstrap)
+      - name: Terraform Init
         working-directory: ./bootstrap
         run: terraform init
 
-      - name: Terraform Plan (Bootstrap)
+      - name: Terraform Plan
         working-directory: ./bootstrap
         run: |
           terraform plan \
             -var-file="terraform.tfvars.${{ github.event.inputs.environment }}" \
             -out=bootstrap-plan
 
-# manual approval before apply removed
-
-      - name: Terraform Apply (Bootstrap)
-        if: github.event.inputs.create_enabled == 'true'
+      - name: Terraform Apply
         working-directory: ./bootstrap
         run: terraform apply -auto-approve bootstrap-plan
 
       - name: Upload Bootstrap State Artifact
-        if: github.event.inputs.create_enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: bootstrap-state-${{ github.event.inputs.environment }}
@@ -93,22 +69,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Rollback On Failure (Destroy)
-        if: failure() && github.event.inputs.create_enabled == 'true' && github.event.inputs.destroy_enabled == 'true'
-        working-directory: ./bootstrap
-        run: |
-          terraform init
-          if [ ! -f "terraform.tfstate" ]; then
-            PROJECT_NAME=$(awk -F\" '/^project_name/ {print $2}' terraform.tfvars.${{ github.event.inputs.environment }})
-            BUCKET_NAME="${PROJECT_NAME}-terraform-state-${{ github.event.inputs.environment }}"
-            TABLE_NAME="${PROJECT_NAME}-terraform-locks-${{ github.event.inputs.environment }}"
-            terraform import aws_s3_bucket.terraform_state "$BUCKET_NAME"
-            terraform import aws_dynamodb_table.terraform_locks "$TABLE_NAME"
-          fi
-          terraform destroy -var-file="terraform.tfvars.${{ github.event.inputs.environment }}" -auto-approve
-
       - name: Get Bootstrap Outputs
-        if: github.event.inputs.create_enabled == 'true'
         working-directory: ./bootstrap
         id: outputs
         run: |
@@ -127,7 +88,6 @@ jobs:
           echo "3. Your main CI/CD pipeline will now use remote state!" >> $GITHUB_STEP_SUMMARY
 
       - name: Update Backend Config File
-        if: github.event.inputs.create_enabled == 'true'
         run: |
           cat > backend-configs/${{ github.event.inputs.environment }}.hcl << EOF
           bucket         = "${{ steps.outputs.outputs.bucket_name }}"
@@ -138,7 +98,6 @@ jobs:
           EOF
 
       - name: Create Pull Request with Backend Config
-        if: github.event.inputs.create_enabled == 'true'
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -166,31 +125,57 @@ jobs:
           add-paths: |
             backend-configs/${{ github.event.inputs.environment }}.hcl
 
+      - name: Clear AWS Credentials
+        if: always()
+        run: |
+          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+  destroy:
+    if: ${{ vars.DESTROY_BOOTSTRAP_ENABLED != 'false' }}
+    name: Destroy Backend Infrastructure
+    needs: [create]
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Code Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Terraform Binary
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Assume AWS Role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ github.event.inputs.environment == 'dr' && secrets.AWS_ROLE_ARN_DR || github.event.inputs.environment == 'stage' && secrets.AWS_ROLE_ARN_STAGE || secrets.AWS_ROLE_ARN_PROD }}
+          role-session-name: ${{ env.role-session-name }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Download Bootstrap State Artifact
-        if: github.event.inputs.destroy_enabled == 'true'
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           name: bootstrap-state-${{ github.event.inputs.environment }}
           path: bootstrap
 
-      - name: Reconstruct State If Missing
-        if: github.event.inputs.destroy_enabled == 'true'
+      # - name: Reconstruct State If Missing
+      #   working-directory: ./bootstrap
+      #   run: |
+      #     if [ ! -f "terraform.tfstate" ]; then
+      #       terraform init
+      #       PROJECT_NAME=$(awk -F\" '/^project_name/ {print $2}' terraform.tfvars.${{ github.event.inputs.environment }})
+      #       BUCKET_NAME="${PROJECT_NAME}-terraform-state-${{ github.event.inputs.environment }}"
+      #       TABLE_NAME="${PROJECT_NAME}-terraform-locks-${{ github.event.inputs.environment }}"
+      #       terraform import aws_s3_bucket.terraform_state "$BUCKET_NAME"
+      #       terraform import aws_dynamodb_table.terraform_locks "$TABLE_NAME"
+      #     fi
+
+      - name: Terraform Init (Destroy)
         working-directory: ./bootstrap
-        run: |
-          if [ ! -f "terraform.tfstate" ]; then
-            terraform init
-            PROJECT_NAME=$(awk -F\" '/^project_name/ {print $2}' terraform.tfvars.${{ github.event.inputs.environment }})
-            BUCKET_NAME="${PROJECT_NAME}-terraform-state-${{ github.event.inputs.environment }}"
-            TABLE_NAME="${PROJECT_NAME}-terraform-locks-${{ github.event.inputs.environment }}"
-            terraform import aws_s3_bucket.terraform_state "$BUCKET_NAME"
-            terraform import aws_dynamodb_table.terraform_locks "$TABLE_NAME"
-          fi
+        run: terraform init -reconfigure
 
-# manual approval before destroy removed
-
-      - name: Terraform Destroy (Bootstrap)
-        if: github.event.inputs.destroy_enabled == 'true'
+      - name: Terraform Destroy
         working-directory: ./bootstrap
         run: |
           terraform destroy \
