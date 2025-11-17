@@ -159,17 +159,17 @@ jobs:
           name: bootstrap-state-${{ github.event.inputs.environment }}
           path: bootstrap
 
-      - name: Reconstruct State If Missing
-        working-directory: ./bootstrap
-        run: |
-          if [ ! -f "terraform.tfstate" ]; then
-            terraform init
-            PROJECT_NAME=$(awk -F\" '/^project_name/ {print $2}' terraform.tfvars.${{ github.event.inputs.environment }})
-            BUCKET_NAME="${PROJECT_NAME}-terraform-state-${{ github.event.inputs.environment }}"
-            TABLE_NAME="${PROJECT_NAME}-terraform-locks-${{ github.event.inputs.environment }}"
-            terraform import aws_s3_bucket.terraform_state "$BUCKET_NAME"
-            terraform import aws_dynamodb_table.terraform_locks "$TABLE_NAME"
-          fi
+      # - name: Reconstruct State If Missing
+      #   working-directory: ./bootstrap
+      #   run: |
+      #     if [ ! -f "terraform.tfstate" ]; then
+      #       terraform init
+      #       PROJECT_NAME=$(awk -F\" '/^project_name/ {print $2}' terraform.tfvars.${{ github.event.inputs.environment }})
+      #       BUCKET_NAME="${PROJECT_NAME}-terraform-state-${{ github.event.inputs.environment }}"
+      #       TABLE_NAME="${PROJECT_NAME}-terraform-locks-${{ github.event.inputs.environment }}"
+      #       terraform import aws_s3_bucket.terraform_state "$BUCKET_NAME"
+      #       terraform import aws_dynamodb_table.terraform_locks "$TABLE_NAME"
+      #     fi
 
       - name: Terraform Destroy
         working-directory: ./bootstrap
