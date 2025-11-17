@@ -131,8 +131,9 @@ jobs:
           unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
   destroy:
-    if: ${{ vars.CREATE_BOOTSTRAP_ENABLED != 'false' }}
+    if: ${{ vars.DESTROY_BOOTSTRAP_ENABLED == 'true' }}
     name: Destroy Backend Infrastructure
+    needs: [create]
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     steps:
