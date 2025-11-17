@@ -89,7 +89,8 @@ jobs:
         run: |
           echo "==> running terraform plan for VPC DR, please wait..."
           terraform plan \
-            -var="environment=dr" \
+            -input=false \
+            -var-file=../../../environments/${{ github.event.inputs.environment || 'dr' }}.json \
             -out=vpc-plan-dr.out \
             -no-color
         working-directory: ${{ env.MODULE_PATH }}
@@ -175,7 +176,8 @@ jobs:
         run: |
           echo "==> running terraform plan for VPC Stage, please wait..."
           terraform plan \
-            -var="environment=stage" \
+            -input=false \
+            -var-file=../../../environments/stage.json \
             -out=vpc-plan-stage.out \
             -no-color
         working-directory: ${{ env.MODULE_PATH }}
@@ -261,7 +263,8 @@ jobs:
         run: |
           echo "==> running terraform plan for VPC Prod, please wait..."
           terraform plan \
-            -var="environment=prod" \
+            -input=false \
+            -var-file=../../../environments/prod.json \
             -out=vpc-plan-prod.out \
             -no-color
         working-directory: ${{ env.MODULE_PATH }}
@@ -331,7 +334,7 @@ jobs:
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
             echo "==> Feature flag enabled, running terraform apply for VPC DR, please wait..."
-            terraform plan -var="environment=dr" -out=vpc-apply-dr.out
+            terraform plan -input=false -var-file=../../../environments/dr.json -out=vpc-apply-dr.out
             terraform apply -auto-approve vpc-apply-dr.out
           else
             echo "==> Feature flag disabled, skipping terraform apply for VPC DR"
@@ -377,7 +380,7 @@ jobs:
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
             echo "==> Feature flag enabled, running terraform apply for VPC Stage, please wait..."
-            terraform plan -var="environment=stage" -out=vpc-apply-stage.out
+            terraform plan -input=false -var-file=../../../environments/stage.json -out=vpc-apply-stage.out
             terraform apply -auto-approve vpc-apply-stage.out
           else
             echo "==> Feature flag disabled, skipping terraform apply for VPC Stage"
@@ -423,7 +426,7 @@ jobs:
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
             echo "==> Feature flag enabled, running terraform apply for VPC Prod, please wait..."
-            terraform plan -var="environment=prod" -out=vpc-apply-prod.out
+            terraform plan -input=false -var-file=../../../environments/prod.json -out=vpc-apply-prod.out
             terraform apply -auto-approve vpc-apply-prod.out
           else
             echo "==> Feature flag disabled, skipping terraform apply for VPC Prod"
@@ -469,7 +472,8 @@ jobs:
           if [ "$FEATURE_FLAG" == "true" ]; then
             echo "==> Feature flag enabled, running terraform destroy for VPC DR, please wait..."
             terraform destroy \
-              -var="environment=dr" \
+              -input=false \
+              -var-file=../../../environments/dr.json \
               -auto-approve
           else
             echo "==> Feature flag disabled, destroy operation blocked for VPC DR"
@@ -516,7 +520,8 @@ jobs:
           if [ "$FEATURE_FLAG" == "true" ]; then
             echo "==> Feature flag enabled, running terraform destroy for VPC Stage, please wait..."
             terraform destroy \
-              -var="environment=stage" \
+              -input=false \
+              -var-file=../../../environments/stage.json \
               -auto-approve
           else
             echo "==> Feature flag disabled, destroy operation blocked for VPC Stage"
@@ -563,7 +568,8 @@ jobs:
           if [ "$FEATURE_FLAG" == "true" ]; then
             echo "==> Feature flag enabled, running terraform destroy for VPC Prod, please wait..."
             terraform destroy \
-              -var="environment=prod" \
+              -input=false \
+              -var-file=../../../environments/prod.json \
               -auto-approve
           else
             echo "==> Feature flag disabled, destroy operation blocked for VPC Prod"
