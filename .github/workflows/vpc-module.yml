@@ -441,7 +441,7 @@ jobs:
           
   vpc_destroy_dr:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && github.event.inputs.action == 'destroy'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && vars.FEATURE_VPC_DESTROY == 'true'
     environment: ${{ github.event.inputs.environment || 'dr' }}
     needs: [vpc_apply_dr]
     name: VPC Destroy for DR Env
@@ -490,7 +490,7 @@ jobs:
 
   vpc_destroy_stage:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage' && github.event.inputs.action == 'destroy'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage' && vars.FEATURE_VPC_DESTROY == 'true'
     environment: stage-destroy
     name: VPC Destroy for Stage Env
     env:
@@ -538,7 +538,7 @@ jobs:
 
   vpc_destroy_prod:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' && github.event.inputs.action == 'destroy'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' && vars.FEATURE_VPC_DESTROY == 'true'
     environment: prod-destroy
     name: VPC Destroy for Prod Env
     env:
