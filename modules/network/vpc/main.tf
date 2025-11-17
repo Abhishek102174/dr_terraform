@@ -6,7 +6,7 @@
 # =============================================================================
 
 module "vpc" {
-  source = "../../../../reusable_modules/vpc"
+  source = "../../../reusable_modules/vpc"
 
   name       = var.vpc_name
   cidr_block = var.vpc_cidr
