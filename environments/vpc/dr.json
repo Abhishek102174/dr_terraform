@@ -1,5 +1,5 @@
 {
-  "vpc_name": "vpc-dr-new",
+  "vpc_name": "vpc-dr-dr",
   "vpc_cidr": "10.200.48.0/20",
   "tags": {
     "Environment": "dr",
