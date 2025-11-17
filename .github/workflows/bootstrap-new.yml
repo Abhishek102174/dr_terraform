@@ -171,6 +171,10 @@ jobs:
       #       terraform import aws_dynamodb_table.terraform_locks "$TABLE_NAME"
       #     fi
 
+      - name: Terraform Init (Destroy)
+        working-directory: ./bootstrap
+        run: terraform init -reconfigure
+
       - name: Terraform Destroy
         working-directory: ./bootstrap
         run: |
