@@ -2,7 +2,7 @@
 # VPC MODULE - Using Reusable VPC Module
 # =============================================================================
 # Creates the base VPC infrastructure for DR environment using the reusable
-# VPC module from it-web-terraform-modules repository - Added- comment
+# VPC module from it-web-terraform-modules repository - Added
 # =============================================================================
 
 module "vpc" {
