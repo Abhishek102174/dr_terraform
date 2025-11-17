@@ -1,3 +1,6 @@
+# Combined bootstrap workflow: create and destroy in a single session with feature flags and manual approvals
+# Flags: control create/destroy via inputs or env; approvals gate apply/destroy; state preserved across stages
+# Safety: clear logging, rollback on failure, secure secrets handling; see inputs below for usage
 name: Bootstrap Terraform Backend
 
 on:
@@ -19,12 +22,39 @@ on:
         options:
           - create
           - destroy
+      create_enabled:
+        description: 'Enable create stage (feature flag)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      destroy_enabled:
+        description: 'Enable destroy stage (feature flag)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      approvers_create:
+        description: 'Comma-separated GitHub usernames authorized to approve create'
+        required: false
+        default: ''
+        type: string
+      approvers_destroy:
+        description: 'Comma-separated GitHub usernames authorized to approve destroy'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   id-token: write
   contents: write
   pull-requests: write
   actions: read
+  issues: write
 
 env:
   TF_VERSION: '1.5.0'
@@ -64,8 +94,20 @@ jobs:
             -var-file="terraform.tfvars.${{ github.event.inputs.environment }}" \
             -out=bootstrap-plan
 
+      - name: Manual Approval Before Apply
+        if: ${{ github.event.inputs.create_enabled == 'true' || github.event.inputs.action == 'create' }}
+        id: approve_create
+        uses: trstringer/manual-approval@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          approvers: ${{ github.event.inputs.approvers_create != '' && github.event.inputs.approvers_create || github.actor }}
+          minimum-approvals: 1
+          issue-title: "Approval required: Apply bootstrap for ${{ github.event.inputs.environment }}"
+          issue-message: "Approve to proceed with terraform apply for backend bootstrap."
+          timeout-minutes: 120
+
       - name: Terraform Apply (Bootstrap)
-        if: github.event.inputs.action == 'create'
+        if: (github.event.inputs.action == 'create' || github.event.inputs.create_enabled == 'true') && steps.approve_create.outputs.approved == 'true'
         working-directory: ./bootstrap
         run: terraform apply -auto-approve bootstrap-plan
 
@@ -77,6 +119,20 @@ jobs:
           path: bootstrap/terraform.tfstate
           if-no-files-found: error
           retention-days: 14
+
+      - name: Rollback On Failure (Destroy)
+        if: failure() && (github.event.inputs.create_enabled == 'true' || github.event.inputs.action == 'create') && github.event.inputs.destroy_enabled == 'true'
+        working-directory: ./bootstrap
+        run: |
+          terraform init
+          if [ ! -f "terraform.tfstate" ]; then
+            PROJECT_NAME=$(awk -F\" '/^project_name/ {print $2}' terraform.tfvars.${{ github.event.inputs.environment }})
+            BUCKET_NAME="${PROJECT_NAME}-terraform-state-${{ github.event.inputs.environment }}"
+            TABLE_NAME="${PROJECT_NAME}-terraform-locks-${{ github.event.inputs.environment }}"
+            terraform import aws_s3_bucket.terraform_state "$BUCKET_NAME"
+            terraform import aws_dynamodb_table.terraform_locks "$TABLE_NAME"
+          fi
+          terraform destroy -var-file="terraform.tfvars.${{ github.event.inputs.environment }}" -auto-approve
 
       - name: Get Bootstrap Outputs
         if: github.event.inputs.action == 'create'
@@ -138,7 +194,7 @@ jobs:
             backend-configs/${{ github.event.inputs.environment }}.hcl
 
       - name: Download Bootstrap State Artifact
-        if: github.event.inputs.action == 'destroy'
+        if: github.event.inputs.action == 'destroy' || github.event.inputs.destroy_enabled == 'true'
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -146,7 +202,7 @@ jobs:
           path: bootstrap
 
       - name: Reconstruct State If Missing
-        if: github.event.inputs.action == 'destroy'
+        if: github.event.inputs.action == 'destroy' || github.event.inputs.destroy_enabled == 'true'
         working-directory: ./bootstrap
         run: |
           if [ ! -f "terraform.tfstate" ]; then
@@ -158,8 +214,20 @@ jobs:
             terraform import aws_dynamodb_table.terraform_locks "$TABLE_NAME"
           fi
 
+      - name: Manual Approval Before Destroy
+        if: ${{ github.event.inputs.destroy_enabled == 'true' || github.event.inputs.action == 'destroy' }}
+        id: approve_destroy
+        uses: trstringer/manual-approval@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          approvers: ${{ github.event.inputs.approvers_destroy != '' && github.event.inputs.approvers_destroy || github.actor }}
+          minimum-approvals: 1
+          issue-title: "Approval required: Destroy bootstrap for ${{ github.event.inputs.environment }}"
+          issue-message: "Approve to proceed with terraform destroy for backend bootstrap."
+          timeout-minutes: 120
+
       - name: Terraform Destroy (Bootstrap)
-        if: github.event.inputs.action == 'destroy'
+        if: (github.event.inputs.action == 'destroy' || github.event.inputs.destroy_enabled == 'true') && steps.approve_destroy.outputs.approved == 'true'
         working-directory: ./bootstrap
         run: |
           terraform destroy \
