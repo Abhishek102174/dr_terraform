@@ -7,13 +7,13 @@ on:
       - develop
     paths:
       - "modules/network/vpc/**"
-      - "modules/network/networking/**"
+      - "environments/vpc/dr.json"
   pull_request:
     branches:
       - main
     paths:
       - "modules/network/vpc/**"
-      - "modules/network/networking/**"
+      - "environments/vpc/dr.json"
   workflow_dispatch:
     inputs:
       environment:
