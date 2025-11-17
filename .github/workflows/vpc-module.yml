@@ -25,15 +25,7 @@ on:
           - dr
           - stage
           - prod
-      action:
-        description: "Action to perform"
-        required: true
-        default: "plan"
-        type: choice
-        options:
-          - plan
-          - apply
-          - destroy
+
 
 permissions:
   id-token: write
@@ -51,6 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
     name: VPC Pre Apply for DR Env
+    environment: ${{ github.event.inputs.environment || 'dr' }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TERRAFORM_VERSION: '1.5.0'
@@ -309,7 +302,7 @@ jobs:
     runs-on: ubuntu-latest
     if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && github.event.inputs.action == 'apply')
     needs: [vpc_pre_apply_dr]
-    environment: dr
+    environment: ${{ github.event.inputs.environment || 'dr' }}
     name: VPC Apply for DR Env
     env:
       FEATURE_FLAG: ${{ vars.FEATURE_VPC_SETUP }}
@@ -446,7 +439,7 @@ jobs:
   vpc_destroy_dr:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && github.event.inputs.action == 'destroy'
-    environment: dr-destroy
+    environment: ${{ github.event.inputs.environment || 'dr' }}
     name: VPC Destroy for DR Env
     env:
       FEATURE_FLAG: ${{ vars.FEATURE_VPC_DESTROY }}
