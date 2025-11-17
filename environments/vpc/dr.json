@@ -1,0 +1,18 @@
+{
+  "vpc_name": "vpc-dr",
+  "vpc_cidr": "10.200.48.0/20",
+  "tags": {
+    "Environment": "dr",
+    "cost_center": "WG09",
+    "env": "disaster-recovery",
+    "location": "north_virginia-us",
+    "tier": "1",
+    "value_stream": "web2.0",
+    "iso_location": "us",
+    "technical_owner": "web2.0",
+    "version": "1.0",
+    "app": "it-web",
+    "purpose": "disaster-recovery",
+    "managed_by": "terraform"
+  }
+}

@@ -90,7 +90,7 @@ jobs:
           echo "==> running terraform plan for VPC DR, please wait..."
           terraform plan \
             -input=false \
-            -var-file=../../../environments/${{ github.event.inputs.environment || 'dr' }}.json \
+            -var-file=../../../environments/vpc/dr.json \
             -out=vpc-plan-dr.out \
             -no-color
         working-directory: ${{ env.MODULE_PATH }}
@@ -334,7 +334,7 @@ jobs:
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
             echo "==> Feature flag enabled, running terraform apply for VPC DR, please wait..."
-            terraform plan -input=false -var-file=../../../environments/dr.json -out=vpc-apply-dr.out
+            terraform plan -input=false -var-file=../../../environments/vpc/dr.json -out=vpc-apply-dr.out
             terraform apply -auto-approve vpc-apply-dr.out
           else
             echo "==> Feature flag disabled, skipping terraform apply for VPC DR"
@@ -473,7 +473,7 @@ jobs:
             echo "==> Feature flag enabled, running terraform destroy for VPC DR, please wait..."
             terraform destroy \
               -input=false \
-              -var-file=../../../environments/dr.json \
+              -var-file=../../../environments/vpc/dr.json \
               -auto-approve
           else
             echo "==> Feature flag disabled, destroy operation blocked for VPC DR"
