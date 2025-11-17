@@ -11,22 +11,7 @@ on:
           - dr
           - stage
           - prod
-      create_enabled:
-        description: 'Enable create stage (feature flag)'
-        required: false
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-      destroy_enabled:
-        description: 'Enable destroy stage (feature flag)'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
+
 
 permissions:
   id-token: write
@@ -41,10 +26,10 @@ env:
 
 jobs:
   create:
-    if: ${{ github.event.inputs.create_enabled == 'true' }}
+    if: ${{ vars.CREATE_BOOTSTRAP_ENABLED == 'true' }}
     name: Create Backend Infrastructure
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}-bootstrap
+    environment: ${{ github.event.inputs.environment }}
     steps:
       - name: Code Checkout
         uses: actions/checkout@v4
@@ -147,10 +132,10 @@ jobs:
 
   destroy:
     needs: [create]
-    if: ${{ github.event.inputs.destroy_enabled == 'true' }}
+    if: ${{ vars.DESTROY_BOOTSTRAP_ENABLED == 'true' }}
     name: Destroy Backend Infrastructure
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}-bootstrap
+    environment: ${{ github.event.inputs.environment }}
     steps:
       - name: Code Checkout
         uses: actions/checkout@v4
