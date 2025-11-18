@@ -18,37 +18,77 @@ data "aws_availability_zones" "available" {
 # NETWORKING INFRASTRUCTURE - Using reusable VPC module
 # -----------------------------------------------------------------------------
 
-module "networking_components" {
-  source = "../../../reusable_modules/vpc"
-  
-  # Use existing VPC - don't create new one
-  name       = "${var.name_prefix}-networking"
-  cidr_block = "10.0.0.0/8"  # Dummy CIDR, won't be used since we're not creating VPC
-  
-  # Create networking components
-  create_igw         = var.create_igw
-  create_nat_gateway = var.create_nat_gateways
+# Internet Gateway attached to existing VPC
+resource "aws_internet_gateway" "this" {
+  count  = var.create_igw ? 1 : 0
+  vpc_id = var.vpc_id
 
-  # Transit Gateway via reusable VPC module
-  create_tgw                          = var.create_tgw
-  tgw_description                     = var.tgw_description
-  tgw_default_route_table_association = var.tgw_default_route_table_association
-  tgw_default_route_table_propagation = var.tgw_default_route_table_propagation
-  tgw_subnet_ids                      = var.tgw_subnet_ids
-  create_tgw_route_table              = var.create_tgw_route_table
-
-  # Public subnets for NAT Gateway placement
-  public_subnets = var.create_nat_gateways ? [
-    for i in range(var.nat_gateway_count) : {
-      cidr_block        = "10.200.${240 + i}.0/28"
-      availability_zone = data.aws_availability_zones.available.names[i]
-    }
-  ] : []
-
-  private_subnets = []
-  
   tags = merge(var.common_tags, {
-    Purpose = "dr-networking-components"
+    Name    = "${var.name_prefix}-igw"
     Service = "networking"
+    Purpose = "dr-internet-gateway"
+  })
+}
+
+# NAT Gateways in provided public subnets
+resource "aws_eip" "nat" {
+  for_each = var.create_nat_gateways && length(var.public_subnet_ids) > 0 ? { for idx, sid in var.public_subnet_ids : idx => sid } : {}
+  domain   = "vpc"
+
+  tags = merge(var.common_tags, {
+    Name    = "${var.name_prefix}-nat-eip-${each.key}"
+    Service = "networking"
+    Purpose = "dr-nat-eip"
+  })
+}
+
+resource "aws_nat_gateway" "this" {
+  for_each     = var.create_nat_gateways && length(var.public_subnet_ids) > 0 ? { for idx, sid in var.public_subnet_ids : idx => sid } : {}
+  subnet_id    = each.value
+  allocation_id = aws_eip.nat[each.key].id
+
+  tags = merge(var.common_tags, {
+    Name    = "${var.name_prefix}-nat-${each.key}"
+    Service = "networking"
+    Purpose = "dr-nat-gateway"
+  })
+}
+
+# Transit Gateway for existing VPC
+resource "aws_ec2_transit_gateway" "this" {
+  count                           = var.create_tgw ? 1 : 0
+  description                     = var.tgw_description
+  default_route_table_association = var.tgw_default_route_table_association
+  default_route_table_propagation = var.tgw_default_route_table_propagation
+  amazon_side_asn                 = var.tgw_amazon_side_asn
+
+  tags = merge(var.common_tags, {
+    Name    = "${var.name_prefix}-tgw"
+    Service = "networking"
+    Purpose = "dr-transit-gateway"
+  })
+}
+
+resource "aws_ec2_transit_gateway_vpc_attachment" "this" {
+  count              = var.create_tgw && length(var.tgw_subnet_ids) > 0 ? 1 : 0
+  transit_gateway_id = aws_ec2_transit_gateway.this[0].id
+  vpc_id             = var.vpc_id
+  subnet_ids         = var.tgw_subnet_ids
+
+  tags = merge(var.common_tags, {
+    Name    = "${var.name_prefix}-tgw-attachment"
+    Service = "networking"
+    Purpose = "dr-tgw-attachment"
+  })
+}
+
+resource "aws_ec2_transit_gateway_route_table" "this" {
+  count              = var.create_tgw_route_table ? 1 : 0
+  transit_gateway_id = aws_ec2_transit_gateway.this[0].id
+
+  tags = merge(var.common_tags, {
+    Name    = "${var.name_prefix}-tgw-rt"
+    Service = "networking"
+    Purpose = "dr-tgw-route-table"
   })
 }

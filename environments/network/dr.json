@@ -17,12 +17,20 @@
   "create_igw": true,
   "create_nat_gateways": true,
   "nat_gateway_count": 3,
-  "public_subnet_ids": [],
+  "public_subnet_ids": [
+    "subnet-022849cb3176e54f8",
+    "subnet-03d3acf7999f8f633",
+    "subnet-02e1e9a902ec1d2de"
+  ],
   "create_tgw": true,
   "tgw_description": "Transit Gateway for DR infrastructure",
   "tgw_default_route_table_association": "enable",
   "tgw_default_route_table_propagation": "enable",
-
-  "tgw_subnet_ids": [],
+  "tgw_amazon_side_asn": 64512,
+  "tgw_subnet_ids": [
+    "subnet-06196bd305caf4c5f",
+    "subnet-0033079c8d034f06b",
+    "subnet-08a2cccea280e8f85"
+  ],
   "create_tgw_route_table": false
 }
