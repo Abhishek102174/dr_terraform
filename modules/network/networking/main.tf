@@ -19,7 +19,7 @@ data "aws_availability_zones" "available" {
 # -----------------------------------------------------------------------------
 
 module "networking_components" {
-  source = "../../../../reusable_modules/vpc"
+  source = "../../../reusable_modules/vpc"
   
   # Use existing VPC - don't create new one
   name       = "${var.name_prefix}-networking"
