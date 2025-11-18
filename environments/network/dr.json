@@ -22,7 +22,7 @@
   "tgw_description": "Transit Gateway for DR infrastructure",
   "tgw_default_route_table_association": "enable",
   "tgw_default_route_table_propagation": "enable",
-  "tgw_amazon_side_asn": 64512,
+
   "tgw_subnet_ids": [],
   "create_tgw_route_table": false
 }

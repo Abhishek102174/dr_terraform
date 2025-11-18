@@ -37,7 +37,7 @@ output "transit_gateway_arn" {
 
 output "transit_gateway_attachment_id" {
   description = "ID of the Transit Gateway VPC attachment"
-  value       = var.create_tgw ? module.networking_components.transit_gateway_attachment_id : null
+  value       = var.create_tgw && length(var.tgw_subnet_ids) > 0 ? module.networking_components.transit_gateway_attachment_id : null
 }
 
 output "transit_gateway_route_table_id" {
