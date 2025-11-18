@@ -110,9 +110,12 @@ module "solr_subnets" {
 resource "aws_route_table" "solr_public_rt" {
   vpc_id = var.vpc_id
   
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = var.internet_gateway_id
+  dynamic "route" {
+    for_each = var.internet_gateway_id != "" ? [var.internet_gateway_id] : []
+    content {
+      cidr_block = "0.0.0.0/0"
+      gateway_id = route.value
+    }
   }
   
   # Add Transit Gateway routes if provided
@@ -139,9 +142,12 @@ resource "aws_route_table_association" "solr_public_rta" {
 resource "aws_route_table" "solr_private_rt" {
   vpc_id = var.vpc_id
   
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = var.nat_gateway_ids[0]  # Use first NAT gateway
+  dynamic "route" {
+    for_each = length(var.nat_gateway_ids) > 0 ? [var.nat_gateway_ids[0]] : []
+    content {
+      cidr_block     = "0.0.0.0/0"
+      nat_gateway_id = route.value
+    }
   }
   
   # Add Transit Gateway routes if provided

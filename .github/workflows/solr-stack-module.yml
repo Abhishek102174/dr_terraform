@@ -113,8 +113,6 @@ jobs:
             -input=false \
             -var-file=../../environments/solr_stack_dr/dr.json \
             -var="vpc_id=${{ steps.detect.outputs.vpc_id }}" \
-            -var="internet_gateway_id=${{ steps.detect.outputs.igw_id }}" \
-            -var="nat_gateway_ids=${{ steps.detect.outputs.nat_gateway_ids }}" \
             -var="key_name=${{ secrets.SOLR_KEY_NAME_DR }}" \
             -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" \
             -out=solr-plan-dr.out \
@@ -366,7 +364,7 @@ jobs:
             VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --query "Vpcs[0].VpcId" --output text --region "${AWS_REGION}")
             IGW_ID=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$VPC_ID" --query "InternetGateways[0].InternetGatewayId" --output text --region "${AWS_REGION}")
             NAT_IDS=$(aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$VPC_ID" --query "NatGateways[].NatGatewayId" --output json --region "${AWS_REGION}")
-            terraform plan -input=false -var-file=../../environments/solr_stack_dr/dr.json -var="vpc_id=${VPC_ID}" -var="internet_gateway_id=${IGW_ID}" -var="nat_gateway_ids=${NAT_IDS}" -var="key_name=${{ secrets.SOLR_KEY_NAME_DR }}" -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" -out=solr-apply-dr.out
+            terraform plan -input=false -var-file=../../environments/solr_stack_dr/dr.json -var="vpc_id=${VPC_ID}" -var="key_name=${{ secrets.SOLR_KEY_NAME_DR }}" -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" -out=solr-apply-dr.out
             terraform apply -auto-approve solr-apply-dr.out
           else
             echo "==> Feature flag disabled, skipping terraform apply for Solr Stack DR"

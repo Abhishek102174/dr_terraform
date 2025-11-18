@@ -78,7 +78,7 @@ module "networking" {
   # Enables outbound internet connectivity for private subnets
   create_nat_gateways = local.current_env.create_nat_gateways  # Boolean flag
   nat_gateway_count   = local.current_env.nat_gateway_count    # Number of NAT GWs
-  public_subnet_ids   = module.solr_stack.solr_public_subnet_ids  # Solr dependency
+  public_subnet_ids   = length(local.current_env.public_subnet_ids) > 0 ? local.current_env.public_subnet_ids : module.solr_stack.solr_public_subnet_ids
   
   # Transit Gateway Configuration for Cross-VPC Connectivity
   # Enables communication between different VPCs and on-premises networks
@@ -86,14 +86,13 @@ module "networking" {
   tgw_description                      = "${local.current_env.name_prefix} Transit Gateway for cross-VPC connectivity"
   tgw_default_route_table_association  = "enable"  # Auto-associate new attachments
   tgw_default_route_table_propagation  = "enable"  # Auto-propagate routes
-  tgw_subnet_ids                       = module.solr_stack.solr_private_subnet_ids  # Solr dependency
+  tgw_subnet_ids                       = length(local.current_env.tgw_subnet_ids) > 0 ? local.current_env.tgw_subnet_ids : module.solr_stack.solr_private_subnet_ids
   create_tgw_route_table              = local.current_env.create_tgw
   
   # Standardized resource tagging
   common_tags = local.current_env.common_tags
   
-  # CRITICAL DEPENDENCY: Must wait for Solr Stack to create subnets first
-  depends_on = [module.solr_stack]
+
 }
 
 # =============================================================================
@@ -132,8 +131,8 @@ module "solr_stack" {
   
   # Networking Dependencies (provided by networking module)
   # These create a circular dependency that's resolved via depends_on
-  internet_gateway_id = module.networking.internet_gateway_id  # For public subnet routing
-  nat_gateway_ids     = module.networking.nat_gateway_ids      # For private subnet internet access
+  internet_gateway_id = try(module.networking.internet_gateway_id, "")
+  nat_gateway_ids     = try(module.networking.nat_gateway_ids, [])
   
   # Environment-Specific Instance Configuration
   instance_type     = local.current_env.solr_instance_type     # e.g., "m5.xlarge"

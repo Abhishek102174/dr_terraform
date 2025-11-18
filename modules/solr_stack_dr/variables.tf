@@ -33,11 +33,13 @@ variable "common_tags" {
 variable "internet_gateway_id" {
   description = "Internet Gateway ID from networking module"
   type        = string
+  default     = ""
 }
 
 variable "nat_gateway_ids" {
   description = "List of NAT Gateway IDs from networking module"
   type        = list(string)
+  default     = []
 }
 
 variable "transit_gateway_routes" {
