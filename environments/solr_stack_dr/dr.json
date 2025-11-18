@@ -1,0 +1,27 @@
+{
+  "name_prefix": "solr-dr-west",
+  "vpc_cidr_block": "10.200.48.0/20",
+  "subnet_cidr_base": "10.201.0.0/20",
+  "key_name": "solr-dr-key",
+  "instance_type": "m5.xlarge",
+  "cluster_size": 1,
+  "data_volume_size": 50,
+  "data_volume_iops": 150,
+  "health_check_grace_period": 1200,
+  "enable_deletion_protection": true,
+  "solr_fallback_ami_id": "ami-0abcdef1234567890",
+  "common_tags": {
+    "Environment": "dr",
+    "cost_center": "WG09",
+    "env": "disaster-recovery",
+    "location": "north_virginia-us",
+    "tier": "1",
+    "value_stream": "web2.0",
+    "iso_location": "us",
+    "technical_owner": "web2.0",
+    "version": "1.0",
+    "app": "it-web",
+    "purpose": "disaster-recovery",
+    "managed_by": "terraform"
+  }
+}

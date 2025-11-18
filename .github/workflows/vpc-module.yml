@@ -23,8 +23,8 @@ on:
         type: choice
         options:
           - dr
-          - stage
-          - prod
+          # - stage
+          # - prod
 
 
 permissions:
@@ -127,179 +127,179 @@ jobs:
         run: |
           unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  vpc_pre_apply_stage:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
-    name: VPC Pre Apply for Stage Env
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TERRAFORM_VERSION: '1.5.0'
+  # vpc_pre_apply_stage:
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+  #   name: VPC Pre Apply for Stage Env
+  #   env:
+  #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     TERRAFORM_VERSION: '1.5.0'
 
-    steps:
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
+  #   steps:
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Assume AWS Role for Stage
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Stage
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        id: init
-        run: |
-          echo "==> running terraform init for VPC module, please wait..."
-          terraform init -backend-config=../../../backend-configs/stage.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       id: init
+  #       run: |
+  #         echo "==> running terraform init for VPC module, please wait..."
+  #         terraform init -backend-config=../../../backend-configs/stage.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Validate
-        run: |
-          echo "==> running terraform validate for VPC"
-          terraform validate
-        continue-on-error: true
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Validate
+  #       run: |
+  #         echo "==> running terraform validate for VPC"
+  #         terraform validate
+  #       continue-on-error: true
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Format
-        id: fmt
-        run: terraform fmt -check
-        continue-on-error: true
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Format
+  #       id: fmt
+  #       run: terraform fmt -check
+  #       continue-on-error: true
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Plan
-        id: plan
-        run: |
-          echo "==> running terraform plan for VPC Stage, please wait..."
-          terraform plan \
-            -input=false \
-            -var-file=../../../environments/stage.json \
-            -out=vpc-plan-stage.out \
-            -no-color
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Plan
+  #       id: plan
+  #       run: |
+  #         echo "==> running terraform plan for VPC Stage, please wait..."
+  #         terraform plan \
+  #           -input=false \
+  #           -var-file=../../../environments/stage.json \
+  #           -out=vpc-plan-stage.out \
+  #           -no-color
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Comment PR with VPC Stage Results
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const output = `#### VPC Module - Stage Environment 🌐
-            #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
-            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+  #     - name: Comment PR with VPC Stage Results
+  #       if: github.event_name == 'pull_request'
+  #       uses: actions/github-script@v7
+  #       with:
+  #         script: |
+  #           const output = `#### VPC Module - Stage Environment 🌐
+  #           #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+  #           #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+  #           #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
 
-            <details><summary>Show VPC Stage Plan</summary>
+  #           <details><summary>Show VPC Stage Plan</summary>
 
-            \`\`\`terraform
-            ${{ steps.plan.outputs.stdout }}
-            \`\`\`
+  #           \`\`\`terraform
+  #           ${{ steps.plan.outputs.stdout }}
+  #           \`\`\`
 
-            </details>
+  #           </details>
 
-            *Module: VPC, Environment: Stage, Action: \`${{ github.event_name }}\`*`;
+  #           Module: VPC, Environment: Stage, Action: \`${{ github.event_name }}\`*`;
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
+  #           github.rest.issues.createComment({
+  #             issue_number: context.issue.number,
+  #             owner: context.repo.owner,
+  #             repo: context.repo.repo,
+  #             body: output
+  #           })
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  vpc_pre_apply_prod:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
-    name: VPC Pre Apply for Prod Env
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TERRAFORM_VERSION: '1.5.0'
+  # vpc_pre_apply_prod:
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+  #   name: VPC Pre Apply for Prod Env
+  #   env:
+  #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     TERRAFORM_VERSION: '1.5.0'
 
-    steps:
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
+  #   steps:
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Assume AWS Role for Prod
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Prod
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        id: init
-        run: |
-          echo "==> running terraform init for VPC module, please wait..."
-          terraform init -backend-config=../../../backend-configs/prod.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       id: init
+  #       run: |
+  #         echo "==> running terraform init for VPC module, please wait..."
+  #         terraform init -backend-config=../../../backend-configs/prod.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Validate
-        run: |
-          echo "==> running terraform validate for VPC"
-          terraform validate
-        continue-on-error: true
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Validate
+  #       run: |
+  #         echo "==> running terraform validate for VPC"
+  #         terraform validate
+  #       continue-on-error: true
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Format
-        id: fmt
-        run: terraform fmt -check
-        continue-on-error: true
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Format
+  #       id: fmt
+  #       run: terraform fmt -check
+  #       continue-on-error: true
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Plan
-        id: plan
-        run: |
-          echo "==> running terraform plan for VPC Prod, please wait..."
-          terraform plan \
-            -input=false \
-            -var-file=../../../environments/prod.json \
-            -out=vpc-plan-prod.out \
-            -no-color
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Plan
+  #       id: plan
+  #       run: |
+  #         echo "==> running terraform plan for VPC Prod, please wait..."
+  #         terraform plan \
+  #           -input=false \
+  #           -var-file=../../../environments/prod.json \
+  #           -out=vpc-plan-prod.out \
+  #           -no-color
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Comment PR with VPC Prod Results
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const output = `#### VPC Module - Production Environment 🌐
-            #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
-            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+  #     - name: Comment PR with VPC Prod Results
+  #       if: github.event_name == 'pull_request'
+  #       uses: actions/github-script@v7
+  #       with:
+  #         script: |
+  #           const output = `#### VPC Module - Production Environment 🌐
+  #           #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+  #           #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+  #           #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
 
-            <details><summary>Show VPC Prod Plan</summary>
+  #           <details><summary>Show VPC Prod Plan</summary>
 
-            \`\`\`terraform
-            ${{ steps.plan.outputs.stdout }}
-            \`\`\`
+  #           \`\`\`terraform
+  #           ${{ steps.plan.outputs.stdout }}
+  #           \`\`\`
 
-            </details>
+  #           </details>
 
-            *Module: VPC, Environment: Production, Action: \`${{ github.event_name }}\`*`;
+  #           Module: VPC, Environment: Production, Action: \`${{ github.event_name }}\`*`;
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
+  #           github.rest.issues.createComment({
+  #             issue_number: context.issue.number,
+  #             owner: context.repo.owner,
+  #             repo: context.repo.repo,
+  #             body: output
+  #           })
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
   vpc_apply_dr:
     runs-on: ubuntu-latest
@@ -347,97 +347,97 @@ jobs:
         run: |
           unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  vpc_apply_stage:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage' && github.event.inputs.action == 'apply'
-    needs: [vpc_pre_apply_stage]
-    environment: stage
-    name: VPC Apply for Stage Env
-    env:
-      FEATURE_FLAG: ${{ vars.FEATURE_VPC_SETUP }}
+  # vpc_apply_stage:
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage' && github.event.inputs.action == 'apply'
+  #   needs: [vpc_pre_apply_stage]
+  #   environment: stage
+  #   name: VPC Apply for Stage Env
+  #   env:
+  #     FEATURE_FLAG: ${{ vars.FEATURE_VPC_SETUP }}
 
-    steps:
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Assume AWS Role for Stage
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Stage
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        run: terraform init -backend-config=../../../backend-configs/stage.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       run: terraform init -backend-config=../../../backend-configs/stage.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Apply
-        run: |
-          if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform apply for VPC Stage, please wait..."
-            terraform plan -input=false -var-file=../../../environments/stage.json -out=vpc-apply-stage.out
-            terraform apply -auto-approve vpc-apply-stage.out
-          else
-            echo "==> Feature flag disabled, skipping terraform apply for VPC Stage"
-            exit 0
-          fi
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Apply
+  #       run: |
+  #         if [ "$FEATURE_FLAG" == "true" ]; then
+  #           echo "==> Feature flag enabled, running terraform apply for VPC Stage, please wait..."
+  #           terraform plan -input=false -var-file=../../../environments/stage.json -out=vpc-apply-stage.out
+  #           terraform apply -auto-approve vpc-apply-stage.out
+  #         else
+  #           echo "==> Feature flag disabled, skipping terraform apply for VPC Stage"
+  #           exit 0
+  #         fi
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  vpc_apply_prod:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' && github.event.inputs.action == 'apply'
-    needs: [vpc_pre_apply_prod]
-    environment: prod
-    name: VPC Apply for Prod Env
-    env:
-      FEATURE_FLAG: ${{ vars.FEATURE_VPC_SETUP }}
+  # vpc_apply_prod:
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' && github.event.inputs.action == 'apply'
+  #   needs: [vpc_pre_apply_prod]
+  #   environment: prod
+  #   name: VPC Apply for Prod Env
+  #   env:
+  #     FEATURE_FLAG: ${{ vars.FEATURE_VPC_SETUP }}
 
-    steps:
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Assume AWS Role for Prod
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Prod
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        run: terraform init -backend-config=../../../backend-configs/prod.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       run: terraform init -backend-config=../../../backend-configs/prod.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Apply
-        run: |
-          if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform apply for VPC Prod, please wait..."
-            terraform plan -input=false -var-file=../../../environments/prod.json -out=vpc-apply-prod.out
-            terraform apply -auto-approve vpc-apply-prod.out
-          else
-            echo "==> Feature flag disabled, skipping terraform apply for VPC Prod"
-            exit 0
-          fi
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Apply
+  #       run: |
+  #         if [ "$FEATURE_FLAG" == "true" ]; then
+  #           echo "==> Feature flag enabled, running terraform apply for VPC Prod, please wait..."
+  #           terraform plan -input=false -var-file=../../../environments/prod.json -out=vpc-apply-prod.out
+  #           terraform apply -auto-approve vpc-apply-prod.out
+  #         else
+  #           echo "==> Feature flag disabled, skipping terraform apply for VPC Prod"
+  #           exit 0
+  #         fi
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
           
   vpc_destroy_dr:
     runs-on: ubuntu-latest
@@ -488,98 +488,98 @@ jobs:
         run: |
           unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  vpc_destroy_stage:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage' && vars.FEATURE_VPC_DESTROY == 'true'
-    environment: stage-destroy
-    name: VPC Destroy for Stage Env
-    env:
-      FEATURE_FLAG: ${{ vars.FEATURE_VPC_DESTROY }}
+  # vpc_destroy_stage:
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage' && vars.FEATURE_VPC_DESTROY == 'true'
+  #   environment: stage-destroy
+  #   name: VPC Destroy for Stage Env
+  #   env:
+  #     FEATURE_FLAG: ${{ vars.FEATURE_VPC_DESTROY }}
 
-    steps:
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Assume AWS Role for Stage
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Stage
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        run: terraform init -backend-config=../../../backend-configs/stage.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       run: terraform init -backend-config=../../../backend-configs/stage.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Destroy
-        run: |
-          if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform destroy for VPC Stage, please wait..."
-            terraform destroy \
-              -input=false \
-              -var-file=../../../environments/stage.json \
-              -auto-approve
-          else
-            echo "==> Feature flag disabled, destroy operation blocked for VPC Stage"
-            echo "==> To enable destroy, set FEATURE_VPC_DESTROY variable to 'true'"
-            exit 1
-          fi
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Destroy
+  #       run: |
+  #         if [ "$FEATURE_FLAG" == "true" ]; then
+  #           echo "==> Feature flag enabled, running terraform destroy for VPC Stage, please wait..."
+  #           terraform destroy \
+  #             -input=false \
+  #             -var-file=../../../environments/stage.json \
+  #             -auto-approve
+  #         else
+  #           echo "==> Feature flag disabled, destroy operation blocked for VPC Stage"
+  #           echo "==> To enable destroy, set FEATURE_VPC_DESTROY variable to 'true'"
+  #           exit 1
+  #         fi
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  vpc_destroy_prod:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' && vars.FEATURE_VPC_DESTROY == 'true'
-    environment: prod-destroy
-    name: VPC Destroy for Prod Env
-    env:
-      FEATURE_FLAG: ${{ vars.FEATURE_VPC_DESTROY }}
+  # vpc_destroy_prod:
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' && vars.FEATURE_VPC_DESTROY == 'true'
+  #   environment: prod-destroy
+  #   name: VPC Destroy for Prod Env
+  #   env:
+  #     FEATURE_FLAG: ${{ vars.FEATURE_VPC_DESTROY }}
 
-    steps:
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Assume AWS Role for Prod
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Prod
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        run: terraform init -backend-config=../../../backend-configs/prod.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       run: terraform init -backend-config=../../../backend-configs/prod.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Destroy
-        run: |
-          if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform destroy for VPC Prod, please wait..."
-            terraform destroy \
-              -input=false \
-              -var-file=../../../environments/prod.json \
-              -auto-approve
-          else
-            echo "==> Feature flag disabled, destroy operation blocked for VPC Prod"
-            echo "==> To enable destroy, set FEATURE_VPC_DESTROY variable to 'true'"
-            exit 1
-          fi
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Destroy
+  #       run: |
+  #         if [ "$FEATURE_FLAG" == "true" ]; then
+  #           echo "==> Feature flag enabled, running terraform destroy for VPC Prod, please wait..."
+  #           terraform destroy \
+  #             -input=false \
+  #             -var-file=../../../environments/prod.json \
+  #             -auto-approve
+  #         else
+  #           echo "==> Feature flag disabled, destroy operation blocked for VPC Prod"
+  #           echo "==> To enable destroy, set FEATURE_VPC_DESTROY variable to 'true'"
+  #           exit 1
+  #         fi
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN

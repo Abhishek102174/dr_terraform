@@ -1,0 +1,370 @@
+name: Networking Module CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - "modules/network/networking/**"
+      - "environments/network/dr.json"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "modules/network/networking/**"
+      - "environments/network/dr.json"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        required: true
+        default: "dr"
+        type: choice
+        options:
+          - dr
+          # - stage
+          # - prod
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  TF_VERSION: "1.5.0"
+  AWS_REGION: "us-east-1"
+  role-session-name: "gh-network-${{ github.run_id }}"
+  MODULE_PATH: ./modules/network/networking
+
+jobs:
+  networking_pre_apply_dr:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+    name: Networking Pre Apply for DR Env
+    environment: ${{ github.event.inputs.environment || 'dr' }}
+
+    steps:
+      - name: Install Terraform Binary
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Code Checkout
+        uses: actions/checkout@v4
+
+      - name: Assume AWS Role for DR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DR }}
+          role-session-name: ${{ env.role-session-name }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        id: init
+        run: |
+          echo "==> running terraform init for Networking module, please wait..."
+          terraform init -backend-config=../../../backend-configs/dr.hcl
+        working-directory: ${{ env.MODULE_PATH }}
+
+      - name: Detect VPC ID for DR
+        id: vpc
+        run: |
+          VPC_NAME=$(jq -r '.vpc_name' ../../../environments/vpc/dr.json || echo "")
+          if [ -z "$VPC_NAME" ]; then
+            echo "vpc_id=" >> $GITHUB_OUTPUT
+            echo "No vpc_name found in environments/vpc/dr.json" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=$VPC_NAME" \
+            --query "Vpcs[0].VpcId" \
+            --output text \
+            --region "${AWS_REGION}")
+          echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
+          echo "**Detected VPC:** \`$VPC_NAME\` → \`$VPC_ID\`" >> $GITHUB_STEP_SUMMARY
+        working-directory: ${{ env.MODULE_PATH }}
+
+      - name: Terraform Validate
+        run: |
+          echo "==> running terraform validate for Networking"
+          terraform validate
+        continue-on-error: true
+        working-directory: ${{ env.MODULE_PATH }}
+
+      - name: Terraform Format
+        id: fmt
+        run: terraform fmt -check
+        continue-on-error: true
+        working-directory: ${{ env.MODULE_PATH }}
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          echo "==> running terraform plan for Networking DR, please wait..."
+          terraform plan \
+            -input=false \
+            -var-file=../../../environments/network/dr.json \
+            -var="vpc_id=${{ steps.vpc.outputs.vpc_id }}" \
+            -out=networking-plan-dr.out \
+            -no-color
+        working-directory: ${{ env.MODULE_PATH }}
+
+      - name: Comment PR with Networking DR Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### Networking Module - DR Environment 🌐
+            #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+
+            <details><summary>Show Networking DR Plan</summary>
+
+            \`\`\`terraform
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+
+            </details>
+
+            *Module: Networking, Environment: DR, Action: \`${{ github.event_name }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Clear AWS Credentials
+        if: always()
+        run: |
+          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+  # networking_pre_apply_stage:
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+  #   name: Networking Pre Apply for Stage Env
+  #   environment: ${{ github.event.inputs.environment || 'stage' }}
+  #
+  #   steps:
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: ${{ env.TF_VERSION }}
+  #
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Assume AWS Role for Stage
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
+  #
+  #     - name: Terraform Init
+  #       id: init
+  #       run: |
+  #         echo "==> running terraform init for Networking module, please wait..."
+  #         terraform init -backend-config=../../../backend-configs/stage.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
+  #
+  #     - name: Detect VPC ID for Stage
+  #       id: vpc
+  #       run: |
+  #         VPC_NAME=$(jq -r '.vpc_name' ../../../environments/vpc/stage.json || echo "")
+  #         if [ -z "$VPC_NAME" ]; then
+  #           echo "vpc_id=" >> $GITHUB_OUTPUT
+  #           exit 0
+  #         fi
+  #         VPC_ID=$(aws ec2 describe-vpcs \
+  #           --filters "Name=tag:Name,Values=$VPC_NAME" \
+  #           --query "Vpcs[0].VpcId" \
+  #           --output text \
+  #           --region "${AWS_REGION}")
+  #         echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
+  #       working-directory: ${{ env.MODULE_PATH }}
+  #
+  #     - name: Terraform Plan
+  #       id: plan
+  #       run: |
+  #         echo "==> running terraform plan for Networking Stage, please wait..."
+  #         terraform plan \
+  #           -input=false \
+  #           -var-file=../../../environments/network/stage.json \
+  #           -var="vpc_id=${{ steps.vpc.outputs.vpc_id }}" \
+  #           -out=networking-plan-stage.out \
+  #           -no-color
+  #       working-directory: ${{ env.MODULE_PATH }}
+  #
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+  # networking_pre_apply_prod:
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+  #   name: Networking Pre Apply for Prod Env
+  #   environment: ${{ github.event.inputs.environment || 'prod' }}
+  #
+  #   steps:
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: ${{ env.TF_VERSION }}
+  #
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Assume AWS Role for Prod
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
+  #
+  #     - name: Terraform Init
+  #       id: init
+  #       run: |
+  #         echo "==> running terraform init for Networking module, please wait..."
+  #         terraform init -backend-config=../../../backend-configs/prod.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
+  #
+  #     - name: Detect VPC ID for Prod
+  #       id: vpc
+  #       run: |
+  #         VPC_NAME=$(jq -r '.vpc_name' ../../../environments/vpc/prod.json || echo "")
+  #         if [ -z "$VPC_NAME" ]; then
+  #           echo "vpc_id=" >> $GITHUB_OUTPUT
+  #           exit 0
+  #         fi
+  #         VPC_ID=$(aws ec2 describe-vpcs \
+  #           --filters "Name=tag:Name,Values=$VPC_NAME" \
+  #           --query "Vpcs[0].VpcId" \
+  #           --output text \
+  #           --region "${AWS_REGION}")
+  #         echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
+  #       working-directory: ${{ env.MODULE_PATH }}
+  #
+  #     - name: Terraform Plan
+  #       id: plan
+  #       run: |
+  #         echo "==> running terraform plan for Networking Prod, please wait..."
+  #         terraform plan \
+  #           -input=false \
+  #           -var-file=../../../environments/network/prod.json \
+  #           -var="vpc_id=${{ steps.vpc.outputs.vpc_id }}" \
+  #           -out=networking-plan-prod.out \
+  #           -no-color
+  #       working-directory: ${{ env.MODULE_PATH }}
+  #
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+  networking_apply_dr:
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr') || github.ref == 'refs/heads/main'
+    needs: [networking_pre_apply_dr]
+    environment: dr
+    name: Networking Apply for DR Env
+    env:
+      FEATURE_FLAG: ${{ vars.FEATURE_NETWORK_SETUP }}
+
+    steps:
+      - name: Code Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Terraform Binary
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Assume AWS Role for DR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DR }}
+          role-session-name: ${{ env.role-session-name }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init -backend-config=../../../backend-configs/dr.hcl
+        working-directory: ${{ env.MODULE_PATH }}
+
+      - name: Detect VPC ID for DR
+        id: vpc
+        run: |
+          VPC_NAME=$(jq -r '.vpc_name' ../../../environments/vpc/dr.json || echo "")
+          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --query "Vpcs[0].VpcId" --output text --region "${AWS_REGION}")
+          echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
+        working-directory: ${{ env.MODULE_PATH }}
+
+      - name: Terraform Apply
+        run: |
+          if [ "$FEATURE_FLAG" == "true" ]; then
+            echo "==> Feature flag enabled, running terraform apply for Networking DR, please wait..."
+            terraform plan -input=false -var-file=../../../environments/network/dr.json -var="vpc_id=${{ steps.vpc.outputs.vpc_id }}" -out=networking-apply-dr.out
+            terraform apply -auto-approve networking-apply-dr.out
+          else
+            echo "==> Feature flag disabled, skipping terraform apply for Networking DR"
+            exit 0
+          fi
+        working-directory: ${{ env.MODULE_PATH }}
+
+      - name: Clear AWS Credentials
+        if: always()
+        run: |
+          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+  networking_destroy_dr:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && vars.FEATURE_NETWORK_DESTROY == 'true'
+    needs: [networking_apply_dr]
+    environment: dr
+    name: Networking Destroy for DR Env
+    steps:
+      - name: Code Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Terraform Binary
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Assume AWS Role for DR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DR }}
+          role-session-name: ${{ env.role-session-name }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init -backend-config=../../../backend-configs/dr.hcl
+        working-directory: ${{ env.MODULE_PATH }}
+
+      - name: Detect VPC ID for DR
+        id: vpc
+        run: |
+          VPC_NAME=$(jq -r '.vpc_name' ../../../environments/vpc/dr.json || echo "")
+          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --query "Vpcs[0].VpcId" --output text --region "${AWS_REGION}")
+          echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
+        working-directory: ${{ env.MODULE_PATH }}
+
+      - name: Terraform Destroy
+        run: |
+          echo "==> Feature flag enabled, running terraform destroy for Networking DR, please wait..."
+          terraform destroy \
+            -input=false \
+            -var-file=../../../environments/network/dr.json \
+            -var="vpc_id=${{ steps.vpc.outputs.vpc_id }}" \
+            -auto-approve
+        working-directory: ${{ env.MODULE_PATH }}
+
+      - name: Clear AWS Credentials
+        if: always()
+        run: |
+          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN

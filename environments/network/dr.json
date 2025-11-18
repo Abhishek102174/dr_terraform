@@ -1,0 +1,28 @@
+{
+  "name_prefix": "dr-west",
+  "common_tags": {
+    "Environment": "dr",
+    "cost_center": "WG09",
+    "env": "disaster-recovery",
+    "location": "north_virginia-us",
+    "tier": "1",
+    "value_stream": "web2.0",
+    "iso_location": "us",
+    "technical_owner": "web2.0",
+    "version": "1.0",
+    "app": "it-web",
+    "purpose": "disaster-recovery",
+    "managed_by": "terraform"
+  },
+  "create_igw": true,
+  "create_nat_gateways": true,
+  "nat_gateway_count": 3,
+  "public_subnet_ids": [],
+  "create_tgw": false,
+  "tgw_description": "Transit Gateway for DR infrastructure",
+  "tgw_default_route_table_association": "enable",
+  "tgw_default_route_table_propagation": "enable",
+  "tgw_amazon_side_asn": 64512,
+  "tgw_subnet_ids": [],
+  "create_tgw_route_table": false
+}

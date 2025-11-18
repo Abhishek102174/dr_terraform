@@ -7,11 +7,13 @@ on:
       - develop
     paths:
       - 'modules/solr_stack_dr/**'
+      - 'environments/solr_stack_dr/**'
   pull_request:
     branches:
       - main
     paths:
       - 'modules/solr_stack_dr/**'
+      - 'environments/solr_stack_dr/**'
   workflow_dispatch:
     inputs:
       environment:
@@ -21,17 +23,17 @@ on:
         type: choice
         options:
           - dr
-          - stage
-          - prod
-      action:
-        description: 'Action to perform'
-        required: true
-        default: 'plan'
-        type: choice
-        options:
-          - plan
-          - apply
-          - destroy
+          # - stage
+          # - prod
+      # action:
+      #   description: 'Action to perform'
+      #   required: true
+      #   default: 'plan'
+      #   type: choice
+      #   options:
+      #     - plan
+      #     - apply
+      #     - destroy
 
 permissions:
   id-token: write
@@ -90,27 +92,28 @@ jobs:
         continue-on-error: true
         working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Run Checkov Security Scan
-        uses: bridgecrewio/checkov-action@master
-        with:
-          directory: ${{ env.MODULE_PATH }}
-          framework: terraform
-          output_format: sarif
-          output_file_path: checkov-solr-dr.sarif
-        continue-on-error: true
-
-      - name: Upload Checkov Results to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: checkov-solr-dr.sarif
+      - name: Detect VPC and Networking IDs (DR)
+        id: detect
+        run: |
+          VPC_NAME=$(jq -r '.vpc_name' ../../environments/vpc/dr.json || echo "")
+          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --query "Vpcs[0].VpcId" --output text --region "${AWS_REGION}")
+          IGW_ID=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$VPC_ID" --query "InternetGateways[0].InternetGatewayId" --output text --region "${AWS_REGION}")
+          NAT_IDS=$(aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$VPC_ID" --query "NatGateways[].NatGatewayId" --output json --region "${AWS_REGION}")
+          echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
+          echo "igw_id=$IGW_ID" >> $GITHUB_OUTPUT
+          echo "nat_gateway_ids=$NAT_IDS" >> $GITHUB_OUTPUT
+        working-directory: ${{ env.MODULE_PATH }}
 
       - name: Terraform Plan
         id: plan
         run: |
           echo "==> running terraform plan for Solr Stack DR, please wait..."
           terraform plan \
-            -var="environment=dr" \
+            -input=false \
+            -var-file=../../environments/solr_stack_dr/dr.json \
+            -var="vpc_id=${{ steps.detect.outputs.vpc_id }}" \
+            -var="internet_gateway_id=${{ steps.detect.outputs.igw_id }}" \
+            -var="nat_gateway_ids=${{ steps.detect.outputs.nat_gateway_ids }}" \
             -var="key_name=${{ secrets.SOLR_KEY_NAME_DR }}" \
             -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" \
             -out=solr-plan-dr.out \
@@ -149,181 +152,181 @@ jobs:
         run: |
           unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  solr_pre_apply_stage:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
-    name: Solr Stack Pre Apply for Stage Env
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TERRAFORM_VERSION: '1.5.0'
+  # solr_pre_apply_stage:
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+  #   name: Solr Stack Pre Apply for Stage Env
+  #   env:
+  #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     TERRAFORM_VERSION: '1.5.0'
       
-    steps:
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
+  #   steps:
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Assume AWS Role for Stage
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Stage
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        id: init
-        run: |
-          echo "==> running terraform init for Solr Stack module, please wait..."
-          terraform init -backend-config=../../backend-configs/stage.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       id: init
+  #       run: |
+  #         echo "==> running terraform init for Solr Stack module, please wait..."
+  #         terraform init -backend-config=../../backend-configs/stage.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Validate
-        run: |
-          echo "==> running terraform validate for Solr Stack"
-          terraform validate
-        continue-on-error: true
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Validate
+  #       run: |
+  #         echo "==> running terraform validate for Solr Stack"
+  #         terraform validate
+  #       continue-on-error: true
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Format
-        id: fmt
-        run: terraform fmt -check
-        continue-on-error: true
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Format
+  #       id: fmt
+  #       run: terraform fmt -check
+  #       continue-on-error: true
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Plan
-        id: plan
-        run: |
-          echo "==> running terraform plan for Solr Stack Stage, please wait..."
-          terraform plan \
-            -var="environment=stage" \
-            -var="key_name=${{ secrets.SOLR_KEY_NAME_STAGE }}" \
-            -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_STAGE }}" \
-            -out=solr-plan-stage.out \
-            -no-color
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Plan
+  #       id: plan
+  #       run: |
+  #         echo "==> running terraform plan for Solr Stack Stage, please wait..."
+  #         terraform plan \
+  #           -var="environment=stage" \
+  #           -var="key_name=${{ secrets.SOLR_KEY_NAME_STAGE }}" \
+  #           -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_STAGE }}" \
+  #           -out=solr-plan-stage.out \
+  #           -no-color
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Comment PR with Solr Stage Results
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const output = `#### Solr Stack Module - Stage Environment ⚡
-            #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
-            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+  #     - name: Comment PR with Solr Stage Results
+  #       if: github.event_name == 'pull_request'
+  #       uses: actions/github-script@v7
+  #       with:
+  #         script: |
+  #           const output = `#### Solr Stack Module - Stage Environment ⚡
+  #           #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+  #           #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+  #           #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
             
-            <details><summary>Show Solr Stage Plan</summary>
+  #           <details><summary>Show Solr Stage Plan</summary>
             
-            \`\`\`terraform
-            ${{ steps.plan.outputs.stdout }}
-            \`\`\`
+  #           \`\`\`terraform
+  #           ${{ steps.plan.outputs.stdout }}
+  #           \`\`\`
             
-            </details>
+  #           </details>
             
-            *Module: Solr Stack, Environment: Stage, Action: \`${{ github.event_name }}\`*`;
+  #           Module: Solr Stack, Environment: Stage, Action: \`${{ github.event_name }}\`*`;
             
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
+  #           github.rest.issues.createComment({
+  #             issue_number: context.issue.number,
+  #             owner: context.repo.owner,
+  #             repo: context.repo.repo,
+  #             body: output
+  #           })
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  solr_pre_apply_prod:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
-    name: Solr Stack Pre Apply for Prod Env
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TERRAFORM_VERSION: '1.5.0'
+  # solr_pre_apply_prod:
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+  #   name: Solr Stack Pre Apply for Prod Env
+  #   env:
+  #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     TERRAFORM_VERSION: '1.5.0'
       
-    steps:
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
+  #   steps:
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Assume AWS Role for Prod
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Prod
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        id: init
-        run: |
-          echo "==> running terraform init for Solr Stack module, please wait..."
-          terraform init -backend-config=../../backend-configs/prod.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       id: init
+  #       run: |
+  #         echo "==> running terraform init for Solr Stack module, please wait..."
+  #         terraform init -backend-config=../../backend-configs/prod.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Validate
-        run: |
-          echo "==> running terraform validate for Solr Stack"
-          terraform validate
-        continue-on-error: true
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Validate
+  #       run: |
+  #         echo "==> running terraform validate for Solr Stack"
+  #         terraform validate
+  #       continue-on-error: true
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Format
-        id: fmt
-        run: terraform fmt -check
-        continue-on-error: true
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Format
+  #       id: fmt
+  #       run: terraform fmt -check
+  #       continue-on-error: true
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Plan
-        id: plan
-        run: |
-          echo "==> running terraform plan for Solr Stack Prod, please wait..."
-          terraform plan \
-            -var="environment=prod" \
-            -var="key_name=${{ secrets.SOLR_KEY_NAME_PROD }}" \
-            -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_PROD }}" \
-            -out=solr-plan-prod.out \
-            -no-color
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Plan
+  #       id: plan
+  #       run: |
+  #         echo "==> running terraform plan for Solr Stack Prod, please wait..."
+  #         terraform plan \
+  #           -var="environment=prod" \
+  #           -var="key_name=${{ secrets.SOLR_KEY_NAME_PROD }}" \
+  #           -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_PROD }}" \
+  #           -out=solr-plan-prod.out \
+  #           -no-color
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Comment PR with Solr Prod Results
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const output = `#### Solr Stack Module - Production Environment ⚡
-            #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
-            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+  #     - name: Comment PR with Solr Prod Results
+  #       if: github.event_name == 'pull_request'
+  #       uses: actions/github-script@v7
+  #       with:
+  #         script: |
+  #           const output = `#### Solr Stack Module - Production Environment ⚡
+  #           #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+  #           #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+  #           #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
             
-            <details><summary>Show Solr Prod Plan</summary>
+  #           <details><summary>Show Solr Prod Plan</summary>
             
-            \`\`\`terraform
-            ${{ steps.plan.outputs.stdout }}
-            \`\`\`
+  #           \`\`\`terraform
+  #           ${{ steps.plan.outputs.stdout }}
+  #           \`\`\`
             
-            </details>
+  #           </details>
             
-            *Module: Solr Stack, Environment: Production, Action: \`${{ github.event_name }}\`*`;
+  #           Module: Solr Stack, Environment: Production, Action: \`${{ github.event_name }}\`*`;
             
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
+  #           github.rest.issues.createComment({
+  #             issue_number: context.issue.number,
+  #             owner: context.repo.owner,
+  #             repo: context.repo.repo,
+  #             body: output
+  #           })
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
   solr_apply_dr:
     runs-on: ubuntu-latest
@@ -358,11 +361,11 @@ jobs:
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
             echo "==> Feature flag enabled, running terraform apply for Solr Stack DR, please wait..."
-            terraform plan \
-              -var="environment=dr" \
-              -var="key_name=${{ secrets.SOLR_KEY_NAME_DR }}" \
-              -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" \
-              -out=solr-apply-dr.out
+            VPC_NAME=$(jq -r '.vpc_name' ../../environments/vpc/dr.json || echo "")
+            VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --query "Vpcs[0].VpcId" --output text --region "${AWS_REGION}")
+            IGW_ID=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$VPC_ID" --query "InternetGateways[0].InternetGatewayId" --output text --region "${AWS_REGION}")
+            NAT_IDS=$(aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$VPC_ID" --query "NatGateways[].NatGatewayId" --output json --region "${AWS_REGION}")
+            terraform plan -input=false -var-file=../../environments/solr_stack_dr/dr.json -var="vpc_id=${VPC_ID}" -var="internet_gateway_id=${IGW_ID}" -var="nat_gateway_ids=${NAT_IDS}" -var="key_name=${{ secrets.SOLR_KEY_NAME_DR }}" -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" -out=solr-apply-dr.out
             terraform apply -auto-approve solr-apply-dr.out
           else
             echo "==> Feature flag disabled, skipping terraform apply for Solr Stack DR"
@@ -375,105 +378,105 @@ jobs:
         run: |
           unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  solr_apply_stage:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage' && github.event.inputs.action == 'apply'
-    needs: [solr_pre_apply_stage]
-    environment: stage
-    name: Solr Stack Apply for Stage Env
-    env:
-      FEATURE_FLAG: ${{ vars.FEATURE_SOLR_SETUP }}
+  # solr_apply_stage:
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage' && github.event.inputs.action == 'apply'
+  #   needs: [solr_pre_apply_stage]
+  #   environment: stage
+  #   name: Solr Stack Apply for Stage Env
+  #   env:
+  #     FEATURE_FLAG: ${{ vars.FEATURE_SOLR_SETUP }}
       
-    steps:
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: '1.5.0'
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: '1.5.0'
 
-      - name: Assume AWS Role for Stage
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Stage
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        run: terraform init -backend-config=../../backend-configs/stage.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       run: terraform init -backend-config=../../backend-configs/stage.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Apply
-        run: |
-          if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform apply for Solr Stack Stage, please wait..."
-            terraform plan \
-              -var="environment=stage" \
-              -var="key_name=${{ secrets.SOLR_KEY_NAME_STAGE }}" \
-              -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_STAGE }}" \
-              -out=solr-apply-stage.out
-            terraform apply -auto-approve solr-apply-stage.out
-          else
-            echo "==> Feature flag disabled, skipping terraform apply for Solr Stack Stage"
-            exit 0
-          fi
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Apply
+  #       run: |
+  #         if [ "$FEATURE_FLAG" == "true" ]; then
+  #           echo "==> Feature flag enabled, running terraform apply for Solr Stack Stage, please wait..."
+  #           terraform plan \
+  #             -var="environment=stage" \
+  #             -var="key_name=${{ secrets.SOLR_KEY_NAME_STAGE }}" \
+  #             -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_STAGE }}" \
+  #             -out=solr-apply-stage.out
+  #           terraform apply -auto-approve solr-apply-stage.out
+  #         else
+  #           echo "==> Feature flag disabled, skipping terraform apply for Solr Stack Stage"
+  #           exit 0
+  #         fi
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  solr_apply_prod:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' && github.event.inputs.action == 'apply'
-    needs: [solr_pre_apply_prod]
-    environment: prod
-    name: Solr Stack Apply for Prod Env
-    env:
-      FEATURE_FLAG: ${{ vars.FEATURE_SOLR_SETUP }}
+  # solr_apply_prod:
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' && github.event.inputs.action == 'apply'
+  #   needs: [solr_pre_apply_prod]
+  #   environment: prod
+  #   name: Solr Stack Apply for Prod Env
+  #   env:
+  #     FEATURE_FLAG: ${{ vars.FEATURE_SOLR_SETUP }}
       
-    steps:
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: '1.5.0'
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: '1.5.0'
 
-      - name: Assume AWS Role for Prod
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Prod
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        run: terraform init -backend-config=../../backend-configs/prod.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       run: terraform init -backend-config=../../backend-configs/prod.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Apply
-        run: |
-          if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform apply for Solr Stack Prod, please wait..."
-            terraform plan \
-              -var="environment=prod" \
-              -var="key_name=${{ secrets.SOLR_KEY_NAME_PROD }}" \
-              -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_PROD }}" \
-              -out=solr-apply-prod.out
-            terraform apply -auto-approve solr-apply-prod.out
-          else
-            echo "==> Feature flag disabled, skipping terraform apply for Solr Stack Prod"
-            exit 0
-          fi
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Apply
+  #       run: |
+  #         if [ "$FEATURE_FLAG" == "true" ]; then
+  #           echo "==> Feature flag enabled, running terraform apply for Solr Stack Prod, please wait..."
+  #           terraform plan \
+  #             -var="environment=prod" \
+  #             -var="key_name=${{ secrets.SOLR_KEY_NAME_PROD }}" \
+  #             -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_PROD }}" \
+  #             -out=solr-apply-prod.out
+  #           terraform apply -auto-approve solr-apply-prod.out
+  #         else
+  #           echo "==> Feature flag disabled, skipping terraform apply for Solr Stack Prod"
+  #           exit 0
+  #         fi
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
   solr_destroy_dr:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && github.event.inputs.action == 'destroy'
@@ -506,8 +509,16 @@ jobs:
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
             echo "==> Feature flag enabled, running terraform destroy for Solr Stack DR, please wait..."
+            VPC_NAME=$(jq -r '.vpc_name' ../../environments/vpc/dr.json || echo "")
+            VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --query "Vpcs[0].VpcId" --output text --region "${AWS_REGION}")
+            IGW_ID=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$VPC_ID" --query "InternetGateways[0].InternetGatewayId" --output text --region "${AWS_REGION}")
+            NAT_IDS=$(aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$VPC_ID" --query "NatGateways[].NatGatewayId" --output json --region "${AWS_REGION}")
             terraform destroy \
-              -var="environment=dr" \
+              -input=false \
+              -var-file=../../environments/solr_stack_dr/dr.json \
+              -var="vpc_id=${VPC_ID}" \
+              -var="internet_gateway_id=${IGW_ID}" \
+              -var="nat_gateway_ids=${NAT_IDS}" \
               -var="key_name=${{ secrets.SOLR_KEY_NAME_DR }}" \
               -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" \
               -auto-approve
@@ -523,100 +534,100 @@ jobs:
         run: |
           unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  solr_destroy_stage:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage' && github.event.inputs.action == 'destroy'
-    environment: stage-destroy
-    name: Solr Stack Destroy for Stage Env
-    env:
-      FEATURE_FLAG: ${{ vars.FEATURE_SOLR_DESTROY }}
+  # solr_destroy_stage:
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage' && github.event.inputs.action == 'destroy'
+  #   environment: stage-destroy
+  #   name: Solr Stack Destroy for Stage Env
+  #   env:
+  #     FEATURE_FLAG: ${{ vars.FEATURE_SOLR_DESTROY }}
       
-    steps:
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: '1.5.0'
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: '1.5.0'
 
-      - name: Assume AWS Role for Stage
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Stage
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGE }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        run: terraform init -backend-config=../../backend-configs/stage.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       run: terraform init -backend-config=../../backend-configs/stage.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Destroy
-        run: |
-          if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform destroy for Solr Stack Stage, please wait..."
-            terraform destroy \
-              -var="environment=stage" \
-              -var="key_name=${{ secrets.SOLR_KEY_NAME_STAGE }}" \
-              -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_STAGE }}" \
-              -auto-approve
-          else
-            echo "==> Feature flag disabled, destroy operation blocked for Solr Stack Stage"
-            echo "==> To enable destroy, set FEATURE_SOLR_DESTROY variable to 'true'"
-            exit 1
-          fi
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Destroy
+  #       run: |
+  #         if [ "$FEATURE_FLAG" == "true" ]; then
+  #           echo "==> Feature flag enabled, running terraform destroy for Solr Stack Stage, please wait..."
+  #           terraform destroy \
+  #             -var="environment=stage" \
+  #             -var="key_name=${{ secrets.SOLR_KEY_NAME_STAGE }}" \
+  #             -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_STAGE }}" \
+  #             -auto-approve
+  #         else
+  #           echo "==> Feature flag disabled, destroy operation blocked for Solr Stack Stage"
+  #           echo "==> To enable destroy, set FEATURE_SOLR_DESTROY variable to 'true'"
+  #           exit 1
+  #         fi
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-  solr_destroy_prod:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' && github.event.inputs.action == 'destroy'
-    environment: prod-destroy
-    name: Solr Stack Destroy for Prod Env
-    env:
-      FEATURE_FLAG: ${{ vars.FEATURE_SOLR_DESTROY }}
+  # solr_destroy_prod:
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' && github.event.inputs.action == 'destroy'
+  #   environment: prod-destroy
+  #   name: Solr Stack Destroy for Prod Env
+  #   env:
+  #     FEATURE_FLAG: ${{ vars.FEATURE_SOLR_DESTROY }}
       
-    steps:
-      - name: Code Checkout
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Code Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Install Terraform Binary
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: '1.5.0'
+  #     - name: Install Terraform Binary
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_version: '1.5.0'
 
-      - name: Assume AWS Role for Prod
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
-          role-session-name: ${{ env.role-session-name }}
-          aws-region: ${{ env.AWS_REGION }}
+  #     - name: Assume AWS Role for Prod
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+  #         role-session-name: ${{ env.role-session-name }}
+  #         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        run: terraform init -backend-config=../../backend-configs/prod.hcl
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Init
+  #       run: terraform init -backend-config=../../backend-configs/prod.hcl
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Terraform Destroy
-        run: |
-          if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform destroy for Solr Stack Prod, please wait..."
-            terraform destroy \
-              -var="environment=prod" \
-              -var="key_name=${{ secrets.SOLR_KEY_NAME_PROD }}" \
-              -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_PROD }}" \
-              -auto-approve
-          else
-            echo "==> Feature flag disabled, destroy operation blocked for Solr Stack Prod"
-            echo "==> To enable destroy, set FEATURE_SOLR_DESTROY variable to 'true'"
-            exit 1
-          fi
-        working-directory: ${{ env.MODULE_PATH }}
+  #     - name: Terraform Destroy
+  #       run: |
+  #         if [ "$FEATURE_FLAG" == "true" ]; then
+  #           echo "==> Feature flag enabled, running terraform destroy for Solr Stack Prod, please wait..."
+  #           terraform destroy \
+  #             -var="environment=prod" \
+  #             -var="key_name=${{ secrets.SOLR_KEY_NAME_PROD }}" \
+  #             -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_PROD }}" \
+  #             -auto-approve
+  #         else
+  #           echo "==> Feature flag disabled, destroy operation blocked for Solr Stack Prod"
+  #           echo "==> To enable destroy, set FEATURE_SOLR_DESTROY variable to 'true'"
+  #           exit 1
+  #         fi
+  #       working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Clear AWS Credentials
-        if: always()
-        run: |
-          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  #     - name: Clear AWS Credentials
+  #       if: always()
+  #       run: |
+  #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN

@@ -9,8 +9,8 @@ on:
         type: choice
         options:
           - dr
-          - stage
-          - prod
+          # - stage
+          # - prod
 
 
 permissions:
