@@ -18,7 +18,7 @@
   "create_nat_gateways": true,
   "nat_gateway_count": 3,
   "public_subnet_ids": [],
-  "create_tgw": false,
+  "create_tgw": true,
   "tgw_description": "Transit Gateway for DR infrastructure",
   "tgw_default_route_table_association": "enable",
   "tgw_default_route_table_propagation": "enable",
