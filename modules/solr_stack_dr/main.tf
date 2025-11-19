@@ -31,27 +31,11 @@ resource "aws_key_pair" "solr_key" {
 # -----------------------------------------------------------------------------
 
 # Find the latest Solr AMI for launching instances
-data "aws_ami" "solr_ami" {
-  most_recent = true
-  owners      = ["self"]
-  
-  filter {
-    name   = "name"
-    values = ["solr-*"]
-  }
-  
-  filter {
-    name   = "state"
-    values = ["available"]
-  }
-}
+
 
 # Local to handle AMI selection with fallback logic
 locals {
-  # Priority: 1. Explicit ami_id, 2. Latest AMI (if found), 3. Fallback AMI
-  selected_ami_id = var.ami_id != "" ? var.ami_id : (
-    try(data.aws_ami.solr_ami.id, null) != null ? data.aws_ami.solr_ami.id : var.solr_fallback_ami_id
-  )
+  selected_ami_id = var.ami_id != "" ? var.ami_id : var.solr_fallback_ami_id
 }
 
 # Get available AZs for multi-zone Solr cluster deployment
@@ -145,7 +129,7 @@ resource "aws_route_table" "solr_public_rt" {
 }
 
 resource "aws_route_table_association" "solr_public_rta" {
-  subnet_id      = values(module.solr_subnets.public_subnet_ids)[0]  # Only 1 public subnet
+  subnet_id      = module.solr_subnets.public_subnet_ids[0]
   route_table_id = aws_route_table.solr_public_rt.id
 }
 
@@ -188,7 +172,7 @@ resource "aws_route_table" "solr_private_rt" {
 resource "aws_route_table_association" "solr_private_rta" {
   count = 3  # All 3 private subnets use the same route table
   
-  subnet_id      = values(module.solr_subnets.private_subnet_ids)[count.index]
+  subnet_id      = module.solr_subnets.private_subnet_ids[count.index]
   route_table_id = aws_route_table.solr_private_rt.id
 }
 
@@ -308,7 +292,7 @@ module "solr_alb" {
   internal           = true
   lb_type            = "application"
   vpc_id             = var.vpc_id
-  subnet_ids         = values(module.solr_subnets.public_subnet_ids)
+  subnet_ids         = module.solr_subnets.public_subnet_ids
   
   security_group_rules = [
     {
@@ -427,7 +411,7 @@ resource "aws_efs_mount_target" "solr_efs_mount" {
   count = 3
   
   file_system_id  = aws_efs_file_system.solr_efs.id
-  subnet_id       = values(module.solr_subnets.private_subnet_ids)[count.index]
+  subnet_id       = module.solr_subnets.private_subnet_ids[count.index]
   security_groups = [module.solr_security_group.security_group_id]
 }
 
@@ -501,11 +485,11 @@ module "solr_autoscaling" {
   min_size                  = var.cluster_size
   max_size                  = var.cluster_size
   desired_capacity          = var.cluster_size
-  subnet_ids                = values(module.solr_subnets.private_subnet_ids)
+  subnet_ids                = module.solr_subnets.private_subnet_ids
   health_check_type         = "ELB"
   health_check_grace_period = var.health_check_grace_period
   
-  target_group_arns = [module.solr_alb.target_group_arns[0]]
+  target_group_arns = [module.solr_alb.target_group_arns["solr"]]
   
   tags = merge(var.common_tags, {
     Name    = "${var.name_prefix}-solr-cluster"

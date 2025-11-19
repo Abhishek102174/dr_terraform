@@ -325,7 +325,7 @@ jobs:
 
   solr_apply_dr:
     runs-on: ubuntu-latest
-    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && github.event.inputs.action == 'apply')
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' || (github.event.inputs.environment == 'dr' && github.event.inputs.action == 'apply'))
     needs: [solr_pre_apply_dr]
     environment: ${{ github.event.inputs.environment || 'dr' }}
     name: Solr Stack Apply for DR Env
@@ -473,7 +473,7 @@ jobs:
   #         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
   solr_destroy_dr:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && vars.FEATURE_SOLR_DESTROY == 'true'
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' || (github.event.inputs.environment == 'dr' && github.event.inputs.action == 'destroy'))
     environment: ${{ github.event.inputs.environment || 'dr' }}
     needs: [solr_apply_dr]
     name: Solr Stack Destroy for DR Env

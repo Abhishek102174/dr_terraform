@@ -5,12 +5,12 @@
 # Subnet Outputs
 output "solr_private_subnet_ids" {
   description = "List of Solr private subnet IDs"
-  value       = values(module.solr_subnets.private_subnet_ids)
+  value       = module.solr_subnets.private_subnet_ids
 }
 
 output "solr_public_subnet_ids" {
   description = "List of Solr public subnet IDs"
-  value       = values(module.solr_subnets.public_subnet_ids)
+  value       = module.solr_subnets.public_subnet_ids
 }
 
 # Security Group Outputs
