@@ -1,5 +1,5 @@
 {
-  "name_prefix": "solr-dr-west",
+  "name_prefix": "solr-dr-east",
   "vpc_cidr_block": "10.200.48.0/20",
   "subnet_cidr_base": "10.201.0.0/20",
   "key_name": "solr-dr-key",
