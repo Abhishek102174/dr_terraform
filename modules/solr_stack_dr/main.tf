@@ -403,23 +403,43 @@ resource "aws_efs_mount_target" "solr_efs_mount" {
 # S3 BUCKET - Using reusable S3 module for Solr backups
 # -----------------------------------------------------------------------------
 
-module "solr_backup_bucket" {
-  source = "../../reusable_modules/S3"
+resource "aws_s3_bucket" "solr_backups" {
+  bucket = "${var.name_prefix}-solr-backups"
+  tags   = merge(var.common_tags, { Service = "solr", Purpose = "solr-backup-storage" })
+}
 
-  buckets = {
-    "solr-backups" = {
-      bucket_name        = "${var.name_prefix}-solr-backups"
-      tags               = merge(var.common_tags, { Service = "solr", Purpose = "solr-backup-storage" })
-      block_public_access = true
-      versioning_enabled = true
-      encryption_enabled = true
-      sse_algorithm      = "AES256"
-      lifecycle_rules = {
-        solr_backup_lifecycle = {
-          enabled         = true
-          expiration_days = 90
-        }
-      }
+resource "aws_s3_bucket_versioning" "solr_backups" {
+  bucket = aws_s3_bucket.solr_backups.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "solr_backups" {
+  bucket = aws_s3_bucket.solr_backups.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+    bucket_key_enabled = false
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "solr_backups" {
+  bucket                  = aws_s3_bucket.solr_backups.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "solr_backups" {
+  bucket = aws_s3_bucket.solr_backups.id
+  rule {
+    id     = "solr_backup_lifecycle"
+    status = "Enabled"
+    expiration {
+      days = 90
     }
   }
 }
