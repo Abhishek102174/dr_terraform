@@ -33,10 +33,10 @@ permissions:
   pull-requests: write
 
 env:
-  TF_VERSION: "1.5.0"
+  TF_VERSION: "1.12.2"
   AWS_REGION: "us-east-1"
   role-session-name: "gh-vpc-${{ github.run_id }}"
-  MODULE_PATH: ./modules/network/vpc
+  MODULE_PATH: ./
 
 jobs:
   vpc_pre_apply_dr:
@@ -67,8 +67,8 @@ jobs:
       - name: Terraform Init
         id: init
         run: |
-          echo "==> running terraform init for VPC module, please wait..."
-          terraform init -backend-config=../../../backend-configs/dr.hcl
+          echo "==> running terraform init at root for VPC, please wait..."
+          terraform init -backend-config=./backend-configs/dr.hcl
         working-directory: ${{ env.MODULE_PATH }}
 
       - name: Terraform Validate
@@ -87,10 +87,11 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: |
-          echo "==> running terraform plan for VPC DR, please wait..."
+          echo "==> running terraform plan at root (target: vpc), please wait..."
           terraform plan \
             -input=false \
-            -var-file=../../../environments/vpc/dr.json \
+            -var="environment=${{ github.event.inputs.environment || 'dr' }}" \
+            -target=module.vpc \
             -out=vpc-plan-dr.out \
             -no-color
         working-directory: ${{ env.MODULE_PATH }}
@@ -327,14 +328,14 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
-        run: terraform init -backend-config=../../../backend-configs/dr.hcl
+        run: terraform init -backend-config=./backend-configs/dr.hcl
         working-directory: ${{ env.MODULE_PATH }}
 
       - name: Terraform Apply
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform apply for VPC DR, please wait..."
-            terraform plan -input=false -var-file=../../../environments/vpc/dr.json -out=vpc-apply-dr.out
+            echo "==> Feature flag enabled, running terraform apply at root (target: vpc), please wait..."
+            terraform plan -input=false -var="environment=${{ github.event.inputs.environment || 'dr' }}" -target=module.vpc -out=vpc-apply-dr.out
             terraform apply -auto-approve vpc-apply-dr.out
           else
             echo "==> Feature flag disabled, skipping terraform apply for VPC DR"
@@ -465,16 +466,17 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
-        run: terraform init -backend-config=../../../backend-configs/dr.hcl
+        run: terraform init -backend-config=./backend-configs/dr.hcl
         working-directory: ${{ env.MODULE_PATH }}
 
       - name: Terraform Destroy
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform destroy for VPC DR, please wait..."
+            echo "==> Feature flag enabled, running terraform destroy at root (target: vpc), please wait..."
             terraform destroy \
               -input=false \
-              -var-file=../../../environments/vpc/dr.json \
+              -var="environment=${{ github.event.inputs.environment || 'dr' }}" \
+              -target=module.vpc \
               -auto-approve
           else
             echo "==> Feature flag disabled, destroy operation blocked for VPC DR"
