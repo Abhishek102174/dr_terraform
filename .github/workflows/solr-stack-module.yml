@@ -45,7 +45,7 @@ env:
   TF_VERSION: '1.12.2'
   AWS_REGION: 'us-east-1'
   role-session-name: "gh-solr-${{ github.run_id }}"
-  MODULE_PATH: ./modules/solr_stack_dr
+  MODULE_PATH: ./
 
 jobs:
   solr_pre_apply_dr:
@@ -76,8 +76,8 @@ jobs:
       - name: Terraform Init
         id: init
         run: |
-          echo "==> running terraform init for Solr Stack module, please wait..."
-          terraform init -backend-config=../../backend-configs/dr.hcl
+          echo "==> running terraform init at root, please wait..."
+          terraform init -backend-config=./backend-configs/dr.hcl
         working-directory: ${{ env.MODULE_PATH }}
 
       - name: Terraform Validate
@@ -93,24 +93,18 @@ jobs:
         continue-on-error: true
         working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Detect VPC ID (DR)
-        id: detect
-        run: |
-          VPC_NAME=$(jq -r '.vpc_name' ../../environments/vpc/dr.json || echo "")
-          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --query "Vpcs[0].VpcId" --output text --region "${AWS_REGION}")
-          echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
-        working-directory: ${{ env.MODULE_PATH }}
+
 
       - name: Terraform Plan
         id: plan
         run: |
-          echo "==> running terraform plan for Solr Stack DR, please wait..."
+          echo "==> running terraform plan at root (target: solr_stack), please wait..."
           terraform plan \
             -input=false \
-            -var-file=../../environments/solr_stack_dr/dr.json \
-            -var="vpc_id=${{ steps.detect.outputs.vpc_id }}" \
-            -var="key_name=${{ secrets.SOLR_KEY_NAME_DR }}" \
+            -var="environment=${{ github.event.inputs.environment || 'dr' }}" \
+            -var="solr_key_name=${{ secrets.SOLR_KEY_NAME_DR }}" \
             -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" \
+            -target=module.solr_stack \
             -out=solr-plan-dr.out \
             -no-color
         working-directory: ${{ env.MODULE_PATH }}
@@ -349,17 +343,14 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
-        run: terraform init -backend-config=../../backend-configs/dr.hcl
+        run: terraform init -backend-config=./backend-configs/dr.hcl
         working-directory: ${{ env.MODULE_PATH }}
 
       - name: Terraform Apply
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform apply for Solr Stack DR, please wait..."
-            VPC_NAME=$(jq -r '.vpc_name' ../../environments/vpc/dr.json || echo "")
-            VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --query "Vpcs[0].VpcId" --output text --region "${AWS_REGION}")
-
-            terraform plan -input=false -var-file=../../environments/solr_stack_dr/dr.json -var="vpc_id=${VPC_ID}" -var="key_name=${{ secrets.SOLR_KEY_NAME_DR }}" -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" -out=solr-apply-dr.out
+            echo "==> Feature flag enabled, running terraform apply at root (target: solr_stack), please wait..."
+            terraform plan -input=false -var="environment=${{ github.event.inputs.environment || 'dr' }}" -var="solr_key_name=${{ secrets.SOLR_KEY_NAME_DR }}" -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" -target=module.solr_stack -out=solr-apply-dr.out
             terraform apply -auto-approve solr-apply-dr.out
           else
             echo "==> Feature flag disabled, skipping terraform apply for Solr Stack DR"
@@ -497,21 +488,19 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
-        run: terraform init -backend-config=../../backend-configs/dr.hcl
+        run: terraform init -backend-config=./backend-configs/dr.hcl
         working-directory: ${{ env.MODULE_PATH }}
 
       - name: Terraform Destroy
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform destroy for Solr Stack DR, please wait..."
-            VPC_NAME=$(jq -r '.vpc_name' ../../environments/vpc/dr.json || echo "")
-            VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --query "Vpcs[0].VpcId" --output text --region "${AWS_REGION}")
+            echo "==> Feature flag enabled, running terraform destroy at root (target: solr_stack), please wait..."
             terraform destroy \
               -input=false \
-              -var-file=../../environments/solr_stack_dr/dr.json \
-              -var="vpc_id=${VPC_ID}" \
-              -var="key_name=${{ secrets.SOLR_KEY_NAME_DR }}" \
+              -var="environment=${{ github.event.inputs.environment || 'dr' }}" \
+              -var="solr_key_name=${{ secrets.SOLR_KEY_NAME_DR }}" \
               -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" \
+              -target=module.solr_stack \
               -auto-approve
           else
             echo "==> Feature flag disabled, destroy operation blocked for Solr Stack DR"
