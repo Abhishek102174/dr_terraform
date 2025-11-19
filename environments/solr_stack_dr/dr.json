@@ -9,7 +9,7 @@
   "data_volume_iops": 150,
   "health_check_grace_period": 1200,
   "enable_deletion_protection": true,
-  "solr_fallback_ami_id": "ami-0abcdef1234567890",
+  "solr_fallback_ami_id": "ami-0fa3fe0fa7920f68e",
   "common_tags": {
     "Environment": "dr",
     "cost_center": "WG09",
