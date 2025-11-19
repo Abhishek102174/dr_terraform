@@ -85,8 +85,8 @@ module "networking" {
   tgw_description                      = "${local.current_env.name_prefix} Transit Gateway for cross-VPC connectivity"
   tgw_default_route_table_association  = "enable"  # Auto-associate new attachments
   tgw_default_route_table_propagation  = "enable"  # Auto-propagate routes
-  tgw_subnet_ids                       = length(local.current_env.tgw_subnet_ids) > 0 ? local.current_env.tgw_subnet_ids : module.solr_stack.solr_private_subnet_ids
-  create_tgw_route_table              = local.current_env.create_tgw
+  tgw_subnet_ids      = length(local.current_env.tgw_subnet_ids) > 0 ? local.current_env.tgw_subnet_ids : module.solr_stack.solr_private_subnet_ids
+  create_tgw_route_table = local.current_env.create_tgw
   
   # Standardized resource tagging
   common_tags = local.current_env.common_tags

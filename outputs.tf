@@ -14,7 +14,7 @@ output "environment_config" {
     environment = local.environment
     vpc_name    = local.current_env.vpc_name
     vpc_cidr    = local.current_env.vpc_cidr
-    region      = local.current_env.region
+    region      = local.region
     tier        = local.current_env.common_tags.tier
   }
 }
@@ -50,12 +50,12 @@ output "transit_gateway_id" {
 output "solr_cluster_info" {
   description = "Solr cluster information"
   value = {
-    name_prefix        = local.current_env.solr_name_prefix
-    instance_type      = local.current_env.solr_instance_type
-    cluster_size       = local.current_env.solr_cluster_size
-    data_volume_size   = local.current_env.solr_data_volume_size
-    alb_dns_name      = module.solr_stack.solr_alb_dns_name
-    backup_bucket     = module.solr_stack.solr_backup_bucket_name
+    name_prefix        = local.current_env.name_prefix
+    instance_type      = local.current_env.instance_type
+    cluster_size       = local.current_env.cluster_size
+    data_volume_size   = local.current_env.data_volume_size
+    alb_dns_name       = module.solr_stack.solr_alb_dns_name
+    backup_bucket      = module.solr_stack.solr_backup_bucket_name
   }
 }
 
