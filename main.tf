@@ -153,9 +153,9 @@ module "solr_stack" {
   # Comprehensive Resource Tagging
   # Combines environment tags with module-specific metadata
   common_tags = merge(local.current_env.common_tags, {
-    Purpose      = "${local.environment}-solr-cluster"  # Environment-specific purpose
-    Region       = local.current_env.region             # Target region
-    SourceRegion = "us-east-1"                          # Source region for DR
-    Service      = "solr"                               # Service identifier
+    Purpose      = "${local.environment}-solr-cluster"
+    Region       = local.region
+    SourceRegion = "us-east-1"
+    Service      = "solr"
   })
 }
