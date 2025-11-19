@@ -42,7 +42,7 @@ permissions:
   security-events: write
 
 env:
-  TF_VERSION: '1.5.0'
+  TF_VERSION: '1.12.2'
   AWS_REGION: 'us-east-1'
   role-session-name: "gh-solr-${{ github.run_id }}"
   MODULE_PATH: ./modules/solr_stack_dr
@@ -55,7 +55,7 @@ jobs:
     environment: ${{ github.event.inputs.environment || 'dr' }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TERRAFORM_VERSION: '1.5.0'
+      TERRAFORM_VERSION: '1.12.2'
       
     steps:
       - name: Install Terraform Binary
@@ -343,7 +343,7 @@ jobs:
       - name: Install Terraform Binary
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '1.5.0'
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Assume AWS Role for DR
         uses: aws-actions/configure-aws-credentials@v4
@@ -492,7 +492,7 @@ jobs:
       - name: Install Terraform Binary
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '1.5.0'
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Assume AWS Role for DR
         uses: aws-actions/configure-aws-credentials@v4
