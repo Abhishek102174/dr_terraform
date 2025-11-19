@@ -65,7 +65,7 @@ data "aws_availability_zones" "available" {
 
 # Solr-specific subnets using VPC module pattern (matching actual infrastructure)
 module "solr_subnets" {
-  source = "../../../reusable_modules/vpc"
+  source = "../../reusable_modules/vpc"
   
   # Use existing VPC
   name       = "${var.name_prefix}-solr"
@@ -187,7 +187,7 @@ resource "aws_route_table_association" "solr_private_rta" {
 
 # Security group for Solr cluster instances (matching actual solr-zk-sg)
 module "solr_security_group" {
-  source = "../../../reusable_modules/security_group"
+  source = "../../reusable_modules/security_group"
   
   name        = "${var.name_prefix}-solr-zk-sg"
   description = "Security group for Solr and Zookeeper cluster instances"
@@ -291,7 +291,7 @@ module "solr_security_group" {
 
 # Application Load Balancer for Solr cluster
 module "solr_alb" {
-  source = "../../../reusable_modules/alb"
+  source = "../../reusable_modules/alb"
   
   name               = "${var.name_prefix}-solr-alb"
   internal           = true
@@ -361,7 +361,7 @@ module "solr_alb" {
 
 # IAM role and instance profile for Solr cluster
 module "solr_iam" {
-  source = "../../../reusable_modules/IAM"
+  source = "../../reusable_modules/IAM"
   
   role_name = "${var.name_prefix}-solr-cluster-role"
   
@@ -447,7 +447,7 @@ resource "aws_efs_mount_target" "solr_efs_mount" {
 # -----------------------------------------------------------------------------
 
 module "solr_backup_bucket" {
-  source = "../../../reusable_modules/S3"
+  source = "../../reusable_modules/S3"
   
   bucket_name = "${var.name_prefix}-solr-backups"
   
@@ -492,14 +492,14 @@ module "solr_backup_bucket" {
 # -----------------------------------------------------------------------------
 
 module "solr_autoscaling" {
-  source = "../../../reusable_modules/autoscaling"
+  source = "../../reusable_modules/autoscaling"
   
   name_prefix = "${var.name_prefix}-solr"
   
   # Launch template configuration
   image_id      = local.selected_ami_id
   instance_type = var.instance_type
-  key_name      = aws_key_pair.solr_key.key_name
+  key_name      = var.key_name
   
   vpc_security_group_ids = [module.solr_security_group.security_group_id]
   iam_instance_profile   = module.solr_iam.instance_profile_name

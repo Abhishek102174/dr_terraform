@@ -6,7 +6,8 @@
 # }
 
 # Keep only the key_name variable
-variable "key_name" {
-  description = "EC2 Key Pair name for Solr instances (must exist in AWS)"
-  type        = string
-}
+# variable "key_name" {
+#  description = "Public key content for Solr cluster SSH access"
+#  type        = string
+#  default     = ""
+# }
