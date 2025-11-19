@@ -59,43 +59,27 @@ data "aws_iam_policy_document" "ec2_assume_role" {
 }
 
 # Solr-specific subnets using VPC module pattern (matching actual infrastructure)
-module "solr_subnets" {
-  source = "../../reusable_modules/vpc"
-  
-  # Use existing VPC
-  name       = "${var.name_prefix}-solr"
-  cidr_block = var.subnet_cidr_base
-  
-  # Don't create VPC components (use existing)
-  create_igw        = false
-  create_nat_gateway = false
-  create_dhcp_options = false
-  
-  # Define Solr-specific subnets (matching actual: 3 private + 1 public)
-  public_subnets = [
-    {
-      cidr_block        = "10.200.59.128/28"  # public-subnet-solr-1
-      availability_zone = data.aws_availability_zones.available.names[2]  # us-east-1c
-    }
-  ]
-  
-  private_subnets = [
-    {
-      cidr_block        = "10.200.58.0/25"    # private-subnet-solr-1
-      availability_zone = data.aws_availability_zones.available.names[0]  # us-east-1a
-    },
-    {
-      cidr_block        = "10.200.58.128/25"  # private-subnet-solr-2
-      availability_zone = data.aws_availability_zones.available.names[1]  # us-east-1b
-    },
-    {
-      cidr_block        = "10.200.59.0/25"    # private-subnet-solr-3
-      availability_zone = data.aws_availability_zones.available.names[2]  # us-east-1c
-    }
-  ]
-  
+# Solr-specific subnets in existing VPC
+resource "aws_subnet" "solr_public" {
+  vpc_id                  = var.vpc_id
+  cidr_block              = "10.200.59.128/28"
+  availability_zone       = data.aws_availability_zones.available.names[2]
+  map_public_ip_on_launch = true
   tags = merge(var.common_tags, {
-    Purpose = "solr-cluster-networking"
+    Name = "${var.name_prefix}-public-solr-1"
+    Type = "Public"
+    Service = "solr"
+  })
+}
+
+resource "aws_subnet" "solr_private" {
+  count             = 3
+  vpc_id            = var.vpc_id
+  cidr_block        = element(["10.200.58.0/25", "10.200.58.128/25", "10.200.59.0/25"], count.index)
+  availability_zone = element(data.aws_availability_zones.available.names, count.index)
+  tags = merge(var.common_tags, {
+    Name = "${var.name_prefix}-private-solr-${count.index + 1}"
+    Type = "Private"
     Service = "solr"
   })
 }
@@ -129,7 +113,7 @@ resource "aws_route_table" "solr_public_rt" {
 }
 
 resource "aws_route_table_association" "solr_public_rta" {
-  subnet_id      = module.solr_subnets.public_subnet_ids[0]
+  subnet_id      = aws_subnet.solr_public.id
   route_table_id = aws_route_table.solr_public_rt.id
 }
 
@@ -172,7 +156,7 @@ resource "aws_route_table" "solr_private_rt" {
 resource "aws_route_table_association" "solr_private_rta" {
   count = 3  # All 3 private subnets use the same route table
   
-  subnet_id      = module.solr_subnets.private_subnet_ids[count.index]
+  subnet_id      = aws_subnet.solr_private[count.index].id
   route_table_id = aws_route_table.solr_private_rt.id
 }
 
@@ -292,7 +276,7 @@ module "solr_alb" {
   internal           = true
   lb_type            = "application"
   vpc_id             = var.vpc_id
-  subnet_ids         = module.solr_subnets.public_subnet_ids
+  subnet_ids         = [aws_subnet.solr_public.id]
   
   security_group_rules = [
     {
@@ -411,7 +395,7 @@ resource "aws_efs_mount_target" "solr_efs_mount" {
   count = 3
   
   file_system_id  = aws_efs_file_system.solr_efs.id
-  subnet_id       = module.solr_subnets.private_subnet_ids[count.index]
+  subnet_id       = aws_subnet.solr_private[count.index].id
   security_groups = [module.solr_security_group.security_group_id]
 }
 
@@ -485,7 +469,7 @@ module "solr_autoscaling" {
   min_size                  = var.cluster_size
   max_size                  = var.cluster_size
   desired_capacity          = var.cluster_size
-  subnet_ids                = module.solr_subnets.private_subnet_ids
+  subnet_ids                = aws_subnet.solr_private[*].id
   health_check_type         = "ELB"
   health_check_grace_period = var.health_check_grace_period
   
