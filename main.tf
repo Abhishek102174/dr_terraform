@@ -130,8 +130,8 @@ module "solr_stack" {
   
   # Networking Dependencies (provided by networking module)
   # These create a circular dependency that's resolved via depends_on
-  internet_gateway_id = try(module.networking.internet_gateway_id, "")
-  nat_gateway_ids     = try(module.networking.nat_gateway_ids, [])
+  # internet_gateway_id = try(module.networking.internet_gateway_id, "")
+  # nat_gateway_ids     = try(module.networking.nat_gateway_ids, [])
   
   # Environment-Specific Instance Configuration
   instance_type     = local.current_env.instance_type
