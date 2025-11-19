@@ -483,16 +483,17 @@ module "solr_autoscaling" {
   source = "../../reusable_modules/autoscaling"
   
   name_prefix = "${var.name_prefix}-solr"
+  vpc_id      = var.vpc_id
   
   # Launch template configuration
-  image_id      = local.selected_ami_id
+  ami_id       = local.selected_ami_id
   instance_type = var.instance_type
   key_name      = var.key_name
   
-  vpc_security_group_ids = [module.solr_security_group.security_group_id]
-  iam_instance_profile   = aws_iam_instance_profile.solr.name
+  security_group_ids   = [module.solr_security_group.security_group_id]
+  iam_instance_profile = aws_iam_instance_profile.solr.name
   
-  user_data = base64encode(var.user_data)
+  user_data = var.user_data
   
   # Block device mappings
   block_device_mappings = [
@@ -519,7 +520,7 @@ module "solr_autoscaling" {
   min_size                  = var.cluster_size
   max_size                  = var.cluster_size
   desired_capacity          = var.cluster_size
-  vpc_zone_identifier       = values(module.solr_subnets.private_subnet_ids)
+  subnet_ids                = values(module.solr_subnets.private_subnet_ids)
   health_check_type         = "ELB"
   health_check_grace_period = var.health_check_grace_period
   
