@@ -32,10 +32,10 @@ permissions:
   pull-requests: write
 
 env:
-  TF_VERSION: "1.5.0"
+  TF_VERSION: "1.12.2"
   AWS_REGION: "us-east-1"
   role-session-name: "gh-network-${{ github.run_id }}"
-  MODULE_PATH: ./modules/network/networking
+  MODULE_PATH: ./
 
 jobs:
   networking_pre_apply_dr:
@@ -63,27 +63,11 @@ jobs:
       - name: Terraform Init
         id: init
         run: |
-          echo "==> running terraform init for Networking module, please wait..."
-          terraform init -backend-config=../../../backend-configs/dr.hcl
+          echo "==> running terraform init at root, please wait..."
+          terraform init -backend-config=./backend-configs/dr.hcl
         working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Detect VPC ID for DR
-        id: vpc
-        run: |
-          VPC_NAME=$(jq -r '.vpc_name' ../../../environments/vpc/dr.json || echo "")
-          if [ -z "$VPC_NAME" ]; then
-            echo "vpc_id=" >> $GITHUB_OUTPUT
-            echo "No vpc_name found in environments/vpc/dr.json" >> $GITHUB_STEP_SUMMARY
-            exit 0
-          fi
-          VPC_ID=$(aws ec2 describe-vpcs \
-            --filters "Name=tag:Name,Values=$VPC_NAME" \
-            --query "Vpcs[0].VpcId" \
-            --output text \
-            --region "${AWS_REGION}")
-          echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
-          echo "**Detected VPC:** \`$VPC_NAME\` → \`$VPC_ID\`" >> $GITHUB_STEP_SUMMARY
-        working-directory: ${{ env.MODULE_PATH }}
+
 
       - name: Terraform Validate
         run: |
@@ -101,11 +85,11 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: |
-          echo "==> running terraform plan for Networking DR, please wait..."
+          echo "==> running terraform plan at root (target: networking), please wait..."
           terraform plan \
             -input=false \
-            -var-file=../../../environments/network/dr.json \
-            -var="vpc_id=${{ steps.vpc.outputs.vpc_id }}" \
+            -var="environment=${{ github.event.inputs.environment || 'dr' }}" \
+            -target=module.networking \
             -out=networking-plan-dr.out \
             -no-color
         working-directory: ${{ env.MODULE_PATH }}
@@ -268,9 +252,9 @@ jobs:
 
   networking_apply_dr:
     runs-on: ubuntu-latest
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr') || github.ref == 'refs/heads/main'
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' || (github.event.inputs.environment == 'dr' && github.event.inputs.action == 'apply'))
     needs: [networking_pre_apply_dr]
-    environment: dr
+    environment: ${{ github.event.inputs.environment || 'dr' }}
     name: Networking Apply for DR Env
     env:
       FEATURE_FLAG: ${{ vars.FEATURE_NETWORK_SETUP }}
@@ -292,22 +276,18 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
-        run: terraform init -backend-config=../../../backend-configs/dr.hcl
+        run: |
+          echo "==> running terraform init at root, please wait..."
+          terraform init -backend-config=./backend-configs/dr.hcl
         working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Detect VPC ID for DR
-        id: vpc
-        run: |
-          VPC_NAME=$(jq -r '.vpc_name' ../../../environments/vpc/dr.json || echo "")
-          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --query "Vpcs[0].VpcId" --output text --region "${AWS_REGION}")
-          echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
-        working-directory: ${{ env.MODULE_PATH }}
+
 
       - name: Terraform Apply
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
-            echo "==> Feature flag enabled, running terraform apply for Networking DR, please wait..."
-            terraform plan -input=false -var-file=../../../environments/network/dr.json -var="vpc_id=${{ steps.vpc.outputs.vpc_id }}" -out=networking-apply-dr.out
+            echo "==> Feature flag enabled, running terraform apply at root (target: networking), please wait..."
+            terraform plan -input=false -var="environment=${{ github.event.inputs.environment || 'dr' }}" -target=module.networking -out=networking-apply-dr.out
             terraform apply -auto-approve networking-apply-dr.out
           else
             echo "==> Feature flag disabled, skipping terraform apply for Networking DR"
@@ -322,10 +302,12 @@ jobs:
 
   networking_destroy_dr:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && vars.FEATURE_NETWORK_DESTROY == 'true'
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' || (github.event.inputs.environment == 'dr' && github.event.inputs.action == 'apply'))
     needs: [networking_apply_dr]
-    environment: dr
+    environment: ${{ github.event.inputs.environment || 'dr' }}
     name: Networking Destroy for DR Env
+    env:
+      FEATURE_FLAG: ${{ vars.FEATURE_NETWORK_DESTROY }}
     steps:
       - name: Code Checkout
         uses: actions/checkout@v4
@@ -343,25 +325,27 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
-        run: terraform init -backend-config=../../../backend-configs/dr.hcl
+        run: |
+          echo "==> running terraform init at root, please wait..."
+          terraform init -backend-config=./backend-configs/dr.hcl
         working-directory: ${{ env.MODULE_PATH }}
 
-      - name: Detect VPC ID for DR
-        id: vpc
-        run: |
-          VPC_NAME=$(jq -r '.vpc_name' ../../../environments/vpc/dr.json || echo "")
-          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --query "Vpcs[0].VpcId" --output text --region "${AWS_REGION}")
-          echo "vpc_id=$VPC_ID" >> $GITHUB_OUTPUT
-        working-directory: ${{ env.MODULE_PATH }}
+
 
       - name: Terraform Destroy
         run: |
-          echo "==> Feature flag enabled, running terraform destroy for Networking DR, please wait..."
-          terraform destroy \
-            -input=false \
-            -var-file=../../../environments/network/dr.json \
-            -var="vpc_id=${{ steps.vpc.outputs.vpc_id }}" \
-            -auto-approve
+          if [ "$FEATURE_FLAG" == "true" ]; then
+            echo "==> Feature flag enabled, running terraform destroy at root (target: networking), please wait..."
+            terraform destroy \
+              -input=false \
+              -var="environment=${{ github.event.inputs.environment || 'dr' }}" \
+              -target=module.networking \
+              -auto-approve
+          else
+            echo "==> Feature flag disabled, destroy operation blocked for Networking DR"
+            echo "==> To enable destroy, set FEATURE_NETWORK_DESTROY variable to 'true'"
+            exit 1
+          fi
         working-directory: ${{ env.MODULE_PATH }}
 
       - name: Clear AWS Credentials

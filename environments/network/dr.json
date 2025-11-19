@@ -1,5 +1,5 @@
 {
-  "name_prefix": "dr-west",
+  "name_prefix": "dr-east",
   "common_tags": {
     "Environment": "dr",
     "cost_center": "WG09",
@@ -17,7 +17,7 @@
   "create_igw": true,
   "create_nat_gateways": true,
   "nat_gateway_count": 1,
-  "public_subnet_ids": [],
+  "public_subnet_ids": ["subnet-0e65b2b7c4c3be81c"],
   "create_tgw": false,
   "tgw_description": "Transit Gateway for DR infrastructure",
   "tgw_default_route_table_association": "enable",
