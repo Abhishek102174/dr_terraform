@@ -116,7 +116,7 @@ module "solr_stack" {
   source = "./modules/solr_stack_dr"
   
   # Base Infrastructure Configuration
-  name_prefix       = local.current_env.name_prefix
+  name_prefix       = local.env_solr.name_prefix
   vpc_id           = module.vpc.vpc_id                        # VPC dependency
   vpc_cidr_block   = module.vpc.cidr_block                    # VPC CIDR for security rules
   subnet_cidr_base = local.current_env.subnet_cidr_base  # Base CIDR for Solr subnets
@@ -130,8 +130,8 @@ module "solr_stack" {
   
   # Networking Dependencies (provided by networking module)
   # These create a circular dependency that's resolved via depends_on
-  # internet_gateway_id = try(module.networking.internet_gateway_id, "")
-  # nat_gateway_ids     = try(module.networking.nat_gateway_ids, [])
+  internet_gateway_id = try(module.networking.internet_gateway_id, "")
+  nat_gateway_ids     = try(module.networking.nat_gateway_ids, [])
   
   # Environment-Specific Instance Configuration
   instance_type     = local.current_env.instance_type

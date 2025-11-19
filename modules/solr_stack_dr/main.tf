@@ -186,7 +186,7 @@ module "solr_security_group" {
       from_port                = 22
       to_port                  = 22
       protocol                 = "tcp"
-      source_security_group_id = "self"
+      self                     = true
       description              = "SSH access from solr_zk security group"
     },
     # Solr web interface (8983)
@@ -202,7 +202,7 @@ module "solr_security_group" {
       from_port                = 8983
       to_port                  = 8983
       protocol                 = "tcp"
-      source_security_group_id = "self"
+      self                     = true
       description              = "Solr access from within cluster"
     },
     # Zookeeper coordination (2181)
@@ -218,7 +218,7 @@ module "solr_security_group" {
       from_port                = 2181
       to_port                  = 2181
       protocol                 = "tcp"
-      source_security_group_id = "self"
+      self                     = true
       description              = "Zookeeper access from within cluster"
     },
     # Zookeeper cluster communication (2888-3888)
@@ -226,7 +226,7 @@ module "solr_security_group" {
       from_port                = 2888
       to_port                  = 3888
       protocol                 = "tcp"
-      source_security_group_id = "self"
+      self                     = true
       description              = "Zookeeper cluster communication"
     },
     # EFS access (2049)
@@ -234,7 +234,7 @@ module "solr_security_group" {
       from_port                = 2049
       to_port                  = 2049
       protocol                 = "tcp"
-      source_security_group_id = "self"
+      self                     = true
       description              = "EFS share access for Solr cluster"
     },
     # Monit web interface (2812)
