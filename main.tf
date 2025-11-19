@@ -77,7 +77,7 @@ module "networking" {
   # Enables outbound internet connectivity for private subnets
   create_nat_gateways = local.current_env.create_nat_gateways  # Boolean flag
   nat_gateway_count   = local.current_env.nat_gateway_count    # Number of NAT GWs
-  public_subnet_ids   = length(local.current_env.public_subnet_ids) > 0 ? local.current_env.public_subnet_ids : module.solr_stack.solr_public_subnet_ids
+  # public_subnet_ids   = length(local.current_env.public_subnet_ids) > 0 ? local.current_env.public_subnet_ids : module.solr_stack.solr_public_subnet_ids
   
   # Transit Gateway Configuration for Cross-VPC Connectivity
   # Enables communication between different VPCs and on-premises networks
