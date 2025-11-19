@@ -303,7 +303,7 @@ jobs:
 
   vpc_apply_dr:
     runs-on: ubuntu-latest
-    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && github.event.inputs.action == 'apply')
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' || (github.event.inputs.environment == 'dr' && github.event.inputs.action == 'apply'))
     needs: [vpc_pre_apply_dr]
     environment: ${{ github.event.inputs.environment || 'dr' }}
     name: VPC Apply for DR Env
@@ -441,7 +441,7 @@ jobs:
           
   vpc_destroy_dr:
     runs-on: ubuntu-latest
-    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' || github.event.inputs.environment == 'dr' && vars.FEATURE_VPC_DESTROY == 'true')
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' || (github.event.inputs.environment == 'dr' && vars.FEATURE_VPC_DESTROY == 'true'))
     environment: ${{ github.event.inputs.environment || 'dr' }}
     needs: [vpc_apply_dr]
     name: VPC Destroy for DR Env
