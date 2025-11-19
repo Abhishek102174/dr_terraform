@@ -438,6 +438,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "solr_backups" {
   rule {
     id     = "solr_backup_lifecycle"
     status = "Enabled"
+    filter {
+      prefix = ""
+    }
     expiration {
       days = 90
     }

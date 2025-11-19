@@ -24,13 +24,12 @@ locals {
   # This allows flexible deployment via: terraform workspace select <env>
   environment = var.environment != "" ? var.environment : terraform.workspace
   
-  # Dynamic Configuration Loading:
-  # Loads environment-specific settings from JSON files in /environments/
-  # Supported environments: dr.json, stage.json, prod.json
-  # Each JSON file contains complete environment configuration including:
-  # - VPC settings, networking parameters, instance configurations
-  # - Security settings, operational parameters, and resource tags
-  current_env = jsondecode(file("${path.module}/environments/${local.environment}.json"))
+  # Dynamic Configuration Loading from module-specific JSONs
+  env_vpc  = jsondecode(file("${path.module}/environments/vpc/${local.environment}.json"))
+  env_solr = jsondecode(file("${path.module}/environments/solr_stack_dr/${local.environment}.json"))
+  env_net  = jsondecode(file("${path.module}/environments/network/${local.environment}.json"))
+  current_env = merge(env_vpc, env_solr, env_net)
+  region      = try(env_net.region, try(env_solr.region, "us-east-1"))
 }
 
 # =============================================================================
@@ -117,10 +116,10 @@ module "solr_stack" {
   source = "./modules/solr_stack_dr"
   
   # Base Infrastructure Configuration
-  name_prefix       = local.current_env.solr_name_prefix      # e.g., "dr-solr", "stage-solr"
+  name_prefix       = local.current_env.name_prefix
   vpc_id           = module.vpc.vpc_id                        # VPC dependency
   vpc_cidr_block   = module.vpc.cidr_block                    # VPC CIDR for security rules
-  subnet_cidr_base = local.current_env.solr_subnet_cidr_base  # Base CIDR for Solr subnets
+  subnet_cidr_base = local.current_env.subnet_cidr_base  # Base CIDR for Solr subnets
   
   # SSH Access Configuration
   key_name         = var.solr_key_name     # EC2 Key Pair for instance access
@@ -135,10 +134,10 @@ module "solr_stack" {
   nat_gateway_ids     = try(module.networking.nat_gateway_ids, [])
   
   # Environment-Specific Instance Configuration
-  instance_type     = local.current_env.solr_instance_type     # e.g., "m5.xlarge"
-  cluster_size      = local.current_env.solr_cluster_size      # Number of Solr nodes
-  data_volume_size  = local.current_env.solr_data_volume_size  # EBS volume size in GB
-  data_volume_iops  = local.current_env.solr_data_volume_iops  # EBS IOPS for performance
+  instance_type     = local.current_env.instance_type
+  cluster_size      = local.current_env.cluster_size
+  data_volume_size  = local.current_env.data_volume_size
+  data_volume_iops  = local.current_env.data_volume_iops
   
   # Operational Configuration
   health_check_grace_period  = local.current_env.health_check_grace_period   # ASG health check delay
@@ -148,7 +147,7 @@ module "solr_stack" {
   # Dynamically loads environment-specific initialization script
   user_data = templatefile("${path.module}/user_data/solr_${local.environment}.sh", {
     environment = local.environment                    # Current environment name
-    region      = local.current_env.region            # Target AWS region
+    region      = local.region
   })
   
   # Comprehensive Resource Tagging
