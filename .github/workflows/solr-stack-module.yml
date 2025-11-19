@@ -56,6 +56,8 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TERRAFORM_VERSION: '1.12.2'
+      TF_VAR_solr_private_key: ${{ secrets.SOLR_PRIVATE_KEY_DR }}
+      TF_VAR_solr_public_key: ${{ secrets.SOLR_PUBLIC_KEY_DR }}
       
     steps:
       - name: Install Terraform Binary
@@ -102,11 +104,9 @@ jobs:
           terraform plan \
             -input=false \
             -var="environment=${{ github.event.inputs.environment || 'dr' }}" \
-            -var="solr_key_name=${{ secrets.SOLR_KEY_NAME_DR }}" 
-            -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" 
-            -var="solr_public_key=${{ secrets.SOLR_PUBLIC_KEY_DR }}" 
-            -target=module.solr_stack 
-            -out=solr-plan-dr.out 
+            -var="solr_key_name=${{ secrets.SOLR_KEY_NAME_DR }}" \
+            -target=module.solr_stack \
+            -out=solr-plan-dr.out \
             -no-color
           if terraform show -json solr-plan-dr.out > solr-plan-dr.json; then
             echo "==> full terraform plan JSON (solr-plan-dr.json)"
@@ -344,6 +344,8 @@ jobs:
     name: Solr Stack Apply for DR Env
     env:
       FEATURE_FLAG: ${{ vars.FEATURE_SOLR_SETUP }}
+      TF_VAR_solr_private_key: ${{ secrets.SOLR_PRIVATE_KEY_DR }}
+      TF_VAR_solr_public_key: ${{ secrets.SOLR_PUBLIC_KEY_DR }}
       
     steps:
       - name: Code Checkout
@@ -369,7 +371,7 @@ jobs:
         run: |
           if [ "$FEATURE_FLAG" == "true" ]; then
             echo "==> Feature flag enabled, running terraform apply at root (target: solr_stack), please wait..."
-            terraform plan -input=false -var="environment=${{ github.event.inputs.environment || 'dr' }}" -var="solr_key_name=${{ secrets.SOLR_KEY_NAME_DR }}" -var="solr_private_key=${{ secrets.SOLR_PRIVATE_KEY_DR }}" -var="solr_public_key=${{ secrets.SOLR_PUBLIC_KEY_DR }}" -target=module.solr_stack -out=solr-apply-dr.out
+            terraform plan -input=false -var="environment=${{ github.event.inputs.environment || 'dr' }}" -var="solr_key_name=${{ secrets.SOLR_KEY_NAME_DR }}" -target=module.solr_stack -out=solr-apply-dr.out
             terraform apply -auto-approve solr-apply-dr.out
             if terraform show -json solr-apply-dr.out > solr-apply-dr.json; then
               echo "==> full terraform apply plan JSON (solr-apply-dr.json)"
