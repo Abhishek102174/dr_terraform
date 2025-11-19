@@ -28,8 +28,8 @@ locals {
   env_vpc  = jsondecode(file("${path.module}/environments/vpc/${local.environment}.json"))
   env_solr = jsondecode(file("${path.module}/environments/solr_stack_dr/${local.environment}.json"))
   env_net  = jsondecode(file("${path.module}/environments/network/${local.environment}.json"))
-  current_env = merge(env_vpc, env_solr, env_net)
-  region      = try(env_net.region, try(env_solr.region, "us-east-1"))
+  current_env = merge(local.env_vpc, local.env_solr, local.env_net)
+  region      = try(local.env_net.region, try(local.env_solr.region, "us-east-1"))
 }
 
 # =============================================================================
