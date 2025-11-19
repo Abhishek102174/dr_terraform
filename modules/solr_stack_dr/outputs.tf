@@ -38,12 +38,12 @@ output "solr_target_group_arn" {
 # IAM Outputs
 output "solr_iam_role_arn" {
   description = "ARN of the Solr IAM role"
-  value       = module.solr_iam.role_arn
+  value       = module.solr_iam.roles["${var.name_prefix}-solr-cluster-role"].arn
 }
 
 output "solr_instance_profile_name" {
   description = "Name of the Solr instance profile"
-  value       = module.solr_iam.instance_profile_name
+  value       = aws_iam_instance_profile.solr.name
 }
 
 # S3 Bucket Outputs

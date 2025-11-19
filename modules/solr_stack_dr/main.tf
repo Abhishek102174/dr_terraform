@@ -63,6 +63,17 @@ data "aws_availability_zones" "available" {
 # SUBNETS AND ROUTING - Using reusable VPC module components
 # -----------------------------------------------------------------------------
 
+# IAM assume role policy for EC2
+data "aws_iam_policy_document" "ec2_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
 # Solr-specific subnets using VPC module pattern (matching actual infrastructure)
 module "solr_subnets" {
   source = "../../reusable_modules/vpc"
@@ -359,53 +370,30 @@ module "solr_alb" {
 # IAM CONFIGURATION - Using reusable IAM module
 # -----------------------------------------------------------------------------
 
-# IAM role and instance profile for Solr cluster
+# IAM role for Solr cluster
 module "solr_iam" {
   source = "../../reusable_modules/IAM"
-  
-  role_name = "${var.name_prefix}-solr-cluster-role"
-  
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-      }
-    ]
-  })
-  
-  policies = [
-    {
-      name = "SolrClusterOperationsPolicy"
-      policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [
-          {
-            Effect = "Allow"
-            Action = [
-              "ec2:DescribeInstances",
-              "ec2:DescribeVolumes",
-              "ec2:AttachVolume",
-              "ec2:DetachVolume"
-            ]
-            Resource = "*"
-          }
-        ]
-      })
+
+  roles = {
+    "${var.name_prefix}-solr-cluster-role" = {
+      assume_role_policy = data.aws_iam_policy_document.ec2_assume_role.json
+      description        = "Role for Solr cluster EC2 instances"
+      tags               = merge(var.common_tags, { Service = "solr" })
     }
-  ]
-  
-  create_instance_profile = true
-  
-  tags = merge(var.common_tags, {
-    Name    = "${var.name_prefix}-solr-cluster-role"
-    Service = "solr"
-    Purpose = "solr-cluster-permissions"
-  })
+  }
+
+  role_policy_attachments = {
+    "solr-ssm" = {
+      role       = "${var.name_prefix}-solr-cluster-role"
+      policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+    }
+  }
+}
+
+resource "aws_iam_instance_profile" "solr" {
+  name = "${var.name_prefix}-solr-instance-profile"
+  role = "${var.name_prefix}-solr-cluster-role"
+  depends_on = [module.solr_iam]
 }
 
 # -----------------------------------------------------------------------------
@@ -502,7 +490,7 @@ module "solr_autoscaling" {
   key_name      = var.key_name
   
   vpc_security_group_ids = [module.solr_security_group.security_group_id]
-  iam_instance_profile   = module.solr_iam.instance_profile_name
+  iam_instance_profile   = aws_iam_instance_profile.solr.name
   
   user_data = base64encode(var.user_data)
   
