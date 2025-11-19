@@ -32,7 +32,7 @@ output "solr_alb_dns_name" {
 
 output "solr_target_group_arn" {
   description = "ARN of the Solr target group"
-  value       = module.solr_alb.target_group_arns[0]
+  value       = module.solr_alb.target_group_arns["solr"]
 }
 
 # IAM Outputs

@@ -327,35 +327,36 @@ module "solr_alb" {
     }
   ]
   
-  target_groups = [
-    {
+  target_groups = {
+    solr = {
       name     = "${var.name_prefix}-solr-tg"
       port     = 8983
       protocol = "HTTP"
       health_check = {
-        enabled             = true
-        healthy_threshold   = 2
-        interval            = 30
-        matcher             = "200"
         path                = "/solr/admin/info/system"
-        port                = "traffic-port"
-        protocol            = "HTTP"
+        interval            = 30
         timeout             = 5
+        healthy_threshold   = 2
         unhealthy_threshold = 2
+        matcher             = "200"
       }
     }
-  ]
+  }
   
-  listeners = [
-    {
+  listeners = {
+    http_8983 = {
       port     = 8983
       protocol = "HTTP"
       default_action = {
         type = "forward"
-        target_group_index = 0
+        forward = {
+          target_groups = [
+            { arn = "solr" }
+          ]
+        }
       }
     }
-  ]
+  }
   
   enable_deletion_protection = var.enable_deletion_protection
   
