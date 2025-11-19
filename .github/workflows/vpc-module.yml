@@ -46,7 +46,7 @@ jobs:
     environment: ${{ github.event.inputs.environment || 'dr' }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TERRAFORM_VERSION: '1.5.0'
+      TERRAFORM_VERSION: '1.12.2'
 
     steps:
       - name: Install Terraform Binary
