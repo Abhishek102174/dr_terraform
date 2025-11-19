@@ -480,6 +480,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dr' && vars.FEATURE_SOLR_DESTROY == 'true'
     environment: ${{ github.event.inputs.environment || 'dr' }}
+    needs: [solr_apply_dr]
     name: Solr Stack Destroy for DR Env
     env:
       FEATURE_FLAG: ${{ vars.FEATURE_SOLR_DESTROY }}
