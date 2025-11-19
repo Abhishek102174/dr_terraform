@@ -436,43 +436,23 @@ resource "aws_efs_mount_target" "solr_efs_mount" {
 
 module "solr_backup_bucket" {
   source = "../../reusable_modules/S3"
-  
-  bucket_name = "${var.name_prefix}-solr-backups"
-  
-  versioning = {
-    enabled = true
-  }
-  
-  server_side_encryption_configuration = {
-    rule = {
-      apply_server_side_encryption_by_default = {
-        sse_algorithm = "AES256"
+
+  buckets = {
+    "solr-backups" = {
+      bucket_name        = "${var.name_prefix}-solr-backups"
+      tags               = merge(var.common_tags, { Service = "solr", Purpose = "solr-backup-storage" })
+      block_public_access = true
+      versioning_enabled = true
+      encryption_enabled = true
+      sse_algorithm      = "AES256"
+      lifecycle_rules = {
+        solr_backup_lifecycle = {
+          enabled         = true
+          expiration_days = 90
+        }
       }
     }
   }
-  
-  lifecycle_configuration = {
-    rule = [
-      {
-        id     = "solr_backup_lifecycle"
-        status = "Enabled"
-        
-        expiration = {
-          days = 90
-        }
-        
-        noncurrent_version_expiration = {
-          noncurrent_days = 30
-        }
-      }
-    ]
-  }
-  
-  tags = merge(var.common_tags, {
-    Name    = "${var.name_prefix}-solr-backups"
-    Service = "solr"
-    Purpose = "solr-backup-storage"
-  })
 }
 
 # -----------------------------------------------------------------------------

@@ -49,12 +49,12 @@ output "solr_instance_profile_name" {
 # S3 Bucket Outputs
 output "solr_backup_bucket_name" {
   description = "Name of the Solr backup S3 bucket"
-  value       = module.solr_backup_bucket.bucket_name
+  value       = module.solr_backup_bucket.bucket_names["solr-backups"]
 }
 
 output "solr_backup_bucket_arn" {
   description = "ARN of the Solr backup S3 bucket"
-  value       = module.solr_backup_bucket.bucket_arn
+  value       = module.solr_backup_bucket.bucket_arns["solr-backups"]
 }
 
 # Auto Scaling Group Outputs
