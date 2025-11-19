@@ -22,12 +22,12 @@ output "solr_security_group_id" {
 # Load Balancer Outputs
 output "solr_alb_arn" {
   description = "ARN of the Solr Application Load Balancer"
-  value       = module.solr_alb.load_balancer_arn
+  value       = module.solr_alb.arn
 }
 
 output "solr_alb_dns_name" {
   description = "DNS name of the Solr Application Load Balancer"
-  value       = module.solr_alb.load_balancer_dns_name
+  value       = module.solr_alb.dns_name
 }
 
 output "solr_target_group_arn" {
@@ -60,7 +60,7 @@ output "solr_backup_bucket_arn" {
 # Auto Scaling Group Outputs
 output "solr_autoscaling_group_name" {
   description = "Name of the Solr Auto Scaling Group"
-  value       = module.solr_autoscaling.autoscaling_group_name
+  value       = module.solr_autoscaling.asg_name
 }
 
 output "solr_launch_template_id" {
