@@ -72,6 +72,12 @@ variable "solr_private_key" {
   sensitive   = true
 }
 
+variable "solr_public_key" {
+  description = "Public key (OpenSSH format) for AWS key pair import; used if provided"
+  type        = string
+  default     = ""
+}
+
 variable "instance_type" {
   description = "EC2 instance type for Solr nodes"
   type        = string

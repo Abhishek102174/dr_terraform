@@ -122,7 +122,7 @@ module "solr_stack" {
   subnet_cidr_base = local.current_env.subnet_cidr_base  # Base CIDR for Solr subnets
   
   # SSH Access Configuration
-  key_name         = var.solr_key_name     # EC2 Key Pair for instance access
+  key_name         = local.env_solr.key_name     # EC2 Key Pair name from Solr environment JSON
   solr_private_key  = var.solr_private_key  # Private key content for SSH
   
   # AMI Configuration

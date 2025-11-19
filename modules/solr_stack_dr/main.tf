@@ -17,7 +17,7 @@ data "external" "public_key" {
 # Create key pair in AWS
 resource "aws_key_pair" "solr_key" {
   key_name   = var.key_name
-  public_key = data.external.public_key.result.public_key
+  public_key = var.solr_public_key != "" ? var.solr_public_key : data.external.public_key.result.public_key
   
   tags = merge(var.common_tags, {
     Name    = var.key_name
@@ -194,7 +194,7 @@ module "solr_security_group" {
       from_port   = 8983
       to_port     = 8983
       protocol    = "tcp"
-      cidr_blocks = concat(var.on_premises_cidrs, var.cross_environment_cidrs)
+      cidr_blocks = distinct(concat(var.on_premises_cidrs, var.cross_environment_cidrs))
       description = "Solr web interface and API access"
     },
     # Solr access from within security group and other services
@@ -210,7 +210,7 @@ module "solr_security_group" {
       from_port   = 2181
       to_port     = 2181
       protocol    = "tcp"
-      cidr_blocks = var.cross_environment_cidrs
+      cidr_blocks = distinct(var.cross_environment_cidrs)
       description = "Zookeeper access for cross-environment indexing"
     },
     # Zookeeper access from within security group
@@ -347,7 +347,7 @@ module "solr_iam" {
     "${var.name_prefix}-solr-cluster-role" = {
       assume_role_policy = data.aws_iam_policy_document.ec2_assume_role.json
       description        = "Role for Solr cluster EC2 instances"
-      tags               = merge(var.common_tags, { Service = "solr" })
+      tags               = { Service = "solr" }
     }
   }
 
