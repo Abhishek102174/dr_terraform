@@ -276,7 +276,7 @@ module "solr_alb" {
   internal           = true
   lb_type            = "application"
   vpc_id             = var.vpc_id
-  subnet_ids         = [aws_subnet.solr_public.id]
+  subnet_ids         = aws_subnet.solr_private[*].id
   
   security_group_rules = [
     {
